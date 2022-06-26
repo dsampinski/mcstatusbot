@@ -71,7 +71,7 @@ async def on_message(message):
                     await message.channel.send('Address is already added')
                     return
             if str(message.author.id) != config['adminId'] and len(guilds[str(message.guild.id)]) >= config['addressesPerGuild']:
-                await message.channel.send('Reached maximum amount of addresses in this server')
+                await message.channel.send('Reached maximum amount of addresses in this guild')
                 return
         else: guilds[str(message.guild.id)] = []
 
@@ -91,7 +91,7 @@ async def on_message(message):
             except Exception as e: await message.channel.send('Error: ' + str(e))
             else:
                 guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': playChan.id, 'message': None, 'lastUpdate': {'time': None, 'status': None, 'players': None}})
-                await message.channel.send('Added {}\'s status to this server'.format(message.content.split(' ')[1]))
+                await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
     
     if message.content.startswith('$rem'):
         if (str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels) \
@@ -115,7 +115,7 @@ async def on_message(message):
                     except Exception as e: print(e)
                     
                     guilds[str(message.guild.id)].pop(c)
-                    await message.channel.send('Removed {}\'s status from this server'.format(message.content.split(' ')[1]))
+                    await message.channel.send('Removed {}\'s status from this guild'.format(message.content.split(' ')[1]))
                     break
     
     if message.content.startswith('$list'):
@@ -124,7 +124,7 @@ async def on_message(message):
             return
 
         if str(message.guild.id) in guilds.keys():
-            addresses = 'Addresses added to this server:\n'
+            addresses = 'Addresses added to this guild:\n'
             for server in guilds[str(message.guild.id)]:
                 addresses += server['address'] + '\n'
             await message.channel.send(addresses)
