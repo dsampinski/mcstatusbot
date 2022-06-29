@@ -176,7 +176,6 @@ async def update_status():
                         server['lastUpdate']['players'] = players
                         if server['message'] is None or client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is None:
                             message = await client.get_channel(id=server['playersChannel']).send(players)
-                            await message.pin()
                             server['message'] = message.id
                         else:
                             await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
