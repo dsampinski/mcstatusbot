@@ -32,11 +32,11 @@ Maximum amount of servers that can be added per guild (bypassed by the bot's adm
 
 Ping the bot for its status
 
-> $add <address> <name>
+> $add *address name*
 
 Add a server's status to the guild
 
-> $rem <address>
+> $rem *address*
 
 Remove a server's status from the guild
 
