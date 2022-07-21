@@ -143,8 +143,7 @@ async def ping():
                         servers[server['address']]['reply'] = None
 
                     pingCheck = dt.now()
-                    
-        await asyncio.sleep(1)
+                await asyncio.sleep(0)
 
 async def update():
     global updateCheck
@@ -178,14 +177,14 @@ async def update():
                         else:
                             await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                 except Exception as e: print(e)
-
+                
+                await asyncio.sleep(0)
 
         with open('db.json', 'w') as file:
             file.write(json.dumps(guilds))
 
         updateCheck = dt.now()
         await asyncio.sleep(config['updateInterval'])
-
 
 async def crash_handler():
     while True:
@@ -197,14 +196,12 @@ async def crash_handler():
             loop.create_task(ping())
             print('Restarted ping loop')
 
-
 async def login():
     try:
         await client.start(config['token'])
     except Exception as e:
         print(e)
         loop.stop()
-
     
 loop = asyncio.get_event_loop()
 loop.create_task(init())
