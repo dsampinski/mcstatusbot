@@ -9,7 +9,7 @@ A simple Python Discord bot that tracks Minecraft servers' statuses
 # Config
 > token
 
-Your bot's [token](https://www.writebots.com/discord-bot-token/)
+The bot's [token](https://www.writebots.com/discord-bot-token/)
 
 > adminId
 
