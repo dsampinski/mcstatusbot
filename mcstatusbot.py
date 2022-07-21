@@ -144,6 +144,7 @@ async def ping():
 
                     pingCheck = dt.now()
                 await asyncio.sleep(0)
+        await asyncio.sleep(1)
 
 async def update():
     global updateCheck
