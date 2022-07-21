@@ -43,3 +43,5 @@ Remove a server's status from the guild
 > $list
 
 List all servers in the guild
+
+**User must have permission to manage channels*
