@@ -12,7 +12,7 @@ config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'p
 guilds = {}
 servers = {}
 updateCheck = dt.now()
-mcstatusCheck = dt.now()
+pingCheck = dt.now()
 
 async def init():
     global config
@@ -37,8 +37,8 @@ async def init():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                         except Exception as e: print(e)
     
-    loop.create_task(mcstatus())
-    loop.create_task(update_status())
+    loop.create_task(ping())
+    loop.create_task(update())
     loop.create_task(crash_handler())
 
 @client.event
@@ -52,7 +52,7 @@ async def on_message(message):
         return
 
     if message.content.startswith('$ping'):
-        if dt.now() - updateCheck < td(seconds=config['updateInterval']+60) and dt.now() - mcstatusCheck < td(seconds=len(servers.keys())*3+60):
+        if dt.now() - updateCheck < td(seconds=config['updateInterval']+60) and dt.now() - pingCheck < td(seconds=config['pingInterval']+60):
             await message.channel.send('MC Status Bot is running')
         else: await message.channel.send('An error has occured in MC Status Bot (a loop is not running)')
 
@@ -130,11 +130,9 @@ async def on_message(message):
             await message.channel.send(addresses)
 
 
-async def mcstatus():
-    global mcstatusCheck
+async def ping():
+    global pingCheck
     while True:
-        mcstatusCheck = dt.now()
-
         for guild in guilds:
             for server in guilds[guild]:
                 if servers[server['address']]['time'] is None or dt.now() - servers[server['address']]['time'] >= td(seconds=config['pingInterval']):
@@ -144,13 +142,13 @@ async def mcstatus():
                     except Exception:
                         servers[server['address']]['reply'] = None
 
+                    pingCheck = dt.now()
+                    
         await asyncio.sleep(1)
 
-async def update_status():
+async def update():
     global updateCheck
     while True:
-        updateCheck = dt.now()
-        
         for guild in guilds:
             for server in guilds[guild]:
                 if servers[server['address']]['reply'] is not None:
@@ -185,6 +183,7 @@ async def update_status():
         with open('db.json', 'w') as file:
             file.write(json.dumps(guilds))
 
+        updateCheck = dt.now()
         await asyncio.sleep(config['updateInterval'])
 
 
@@ -192,11 +191,11 @@ async def crash_handler():
     while True:
         await asyncio.sleep(10)
         if dt.now() - updateCheck >= td(seconds=config['updateInterval']+60):
-            loop.create_task(update_status())
+            loop.create_task(update())
             print('Restarted update loop')
-        if dt.now() - mcstatusCheck >= td(seconds=len(servers.keys())*3+60):
-            loop.create_task(mcstatus())
-            print('Restarted mcstatus loop')
+        if dt.now() - pingCheck >= td(seconds=config['pingInterval']+60):
+            loop.create_task(ping())
+            print('Restarted ping loop')
 
 
 async def login():
