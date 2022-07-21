@@ -3,6 +3,7 @@ A simple Python Discord bot that tracks Minecraft servers' statuses
 
 # Setup
 `pip install -r requirements.txt`
+
 `python mcstatusbot.py`
 
 # Config
@@ -24,7 +25,7 @@ Interval between each Discord status update (the voice channel update interval i
 
 > addressesPerGuild
 
-Maximum amount of servers that can be added per guild; bypassed by the bot's admin
+Maximum amount of servers that can be added per guild (bypassed by the bot's admin)
 
 # Commands
 > $ping
