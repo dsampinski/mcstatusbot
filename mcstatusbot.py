@@ -8,7 +8,7 @@ from datetime import datetime as dt, timedelta as td
 intents = discord.Intents.default()
 intents.members = True
 client = discord.Client(intents=intents)
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 servers = {}
 updateCheck = dt.now()
@@ -44,7 +44,7 @@ async def init():
 @client.event
 async def on_ready():
     print('Logged in as {0.user}'.format(client))
-    print('Admin:', client.get_user(int(config['adminId']) if config['adminId'].isnumeric() else None))
+    print('Admin:', client.get_user(int(config['adminId']) if config['adminId'].isnumeric() else None), '\n')
 
 @client.event
 async def on_message(message):
@@ -83,11 +83,12 @@ async def on_message(message):
             try:
                 newCat = await message.guild.create_category(message.content.split(' ')[2])
                 statChan = await message.guild.create_voice_channel('Pinging...', category=newCat)
-                playChan = await message.guild.create_text_channel('players', category=newCat)
                 await statChan.set_permissions(client.user, connect=True)
                 await statChan.set_permissions(message.guild.default_role, connect=False)
-                await playChan.set_permissions(client.user, send_messages=True)
-                await playChan.set_permissions(message.guild.default_role, send_messages=False)
+                if config['showPlayers']:
+                    playChan = await message.guild.create_text_channel('players', category=newCat)
+                    await playChan.set_permissions(client.user, send_messages=True)
+                    await playChan.set_permissions(message.guild.default_role, send_messages=False)
             except Exception as e: await message.channel.send('Error: ' + str(e))
             else:
                 guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': playChan.id, 'message': None, 'lastUpdate': {'time': None, 'status': None, 'players': None}})
@@ -153,15 +154,16 @@ async def update():
             for server in guilds[guild]:
                 if servers[server['address']]['reply'] is not None:
                     if servers[server['address']]['reply'].players.sample is not None:
-                        players = 'Players:\n\n'
-                        for player in servers[server['address']]['reply'].players.sample:
-                            players += player.name + '\n'
+                        if config['showPlayers']:
+                            players = 'Players:\n\n'
+                            for player in servers[server['address']]['reply'].players.sample:
+                                players += player.name + '\n'
                         status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                     else:
-                        players = 'EMPTY'
+                        if config['showPlayers']: players = 'EMPTY'
                         status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                 else:
-                    players = 'OFFLINE'
+                    if config['showPlayers']: players = 'OFFLINE'
                     status = '🔴 OFFLINE'
 
                 try:
@@ -170,7 +172,7 @@ async def update():
                             server['lastUpdate']['time'] = dt.isoformat(dt.now())
                             server['lastUpdate']['status'] = status
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
-                    if players != server['lastUpdate']['players'] and client.get_channel(id=server['playersChannel']) is not None:
+                    if config['showPlayers'] and players != server['lastUpdate']['players'] and client.get_channel(id=server['playersChannel']) is not None:
                         server['lastUpdate']['players'] = players
                         if server['message'] is None or client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is None:
                             message = await client.get_channel(id=server['playersChannel']).send(players)
