@@ -27,6 +27,10 @@ Interval between each Discord status update (the voice channel update interval i
 
 Maximum amount of servers that can be added per guild (bypassed by the bot's admin)
 
+> showPlayers
+
+Whether to show the players list or not
+
 # Commands
 > $ping
 
