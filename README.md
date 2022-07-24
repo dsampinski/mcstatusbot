@@ -1,5 +1,5 @@
 # MC Status Bot
-A simple Python Discord bot that displays Minecraft servers' statuses
+A simple Python Discord bot that displays Minecraft servers' statuses and players
 
 # Setup
 `pip install -r requirements.txt`
