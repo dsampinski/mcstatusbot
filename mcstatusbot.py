@@ -91,7 +91,7 @@ async def on_message(message):
                     await playChan.set_permissions(message.guild.default_role, send_messages=False)
             except Exception as e: await message.channel.send('Error: ' + str(e))
             else:
-                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': playChan.id, 'message': None, 'lastUpdate': {'time': None, 'status': None, 'players': None}})
+                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': None, 'lastUpdate': {'time': None, 'status': None, 'players': None}})
                 await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
     
     if message.content.startswith('$rem'):
