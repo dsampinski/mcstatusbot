@@ -112,7 +112,7 @@ async def on_message(message):
                     msg = await client.get_channel(id=playChan.id).send('Pinging...')
             except Exception as e: await message.channel.send('Error: ' + str(e))
             else:
-                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': msg.id})
+                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': (msg.id if config['showPlayers'] else None)})
                 if str(message.guild.id) not in lastUpdate.keys(): lastUpdate[str(message.guild.id)] = {}
                 lastUpdate[str(message.guild.id)][message.content.split(' ')[1]] = {'statusTime': None, 'status': None, 'players': None}
                 await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
