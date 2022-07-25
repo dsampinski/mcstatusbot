@@ -12,7 +12,7 @@ config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'p
 guilds = {}
 lastUpdate = {}
 servers = {}
-dbUpdate = True
+dbUpdate = False
 
 async def db_updater():
     global dbUpdate
