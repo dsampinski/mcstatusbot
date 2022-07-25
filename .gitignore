@@ -1,6 +1,6 @@
 db.json
 config.json
-
+lastUpdate.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

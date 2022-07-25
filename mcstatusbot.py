@@ -10,13 +10,27 @@ intents.members = True
 client = discord.Client(intents=intents)
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
+lastUpdate = {}
 servers = {}
-updateCheck = dt.now()
-pingCheck = dt.now()
+dbUpdate = True
+
+async def db_updater():
+    global dbUpdate
+
+    while True:
+        if dbUpdate:
+            with open('db.json', 'w') as file:
+                file.write(json.dumps(guilds))
+            dbUpdate = False
+        await asyncio.sleep(10)
+
 
 async def init():
     global config
     global guilds
+    global pingTask
+    global updateTask
+    global dbUpdaterTask
     
     if os.path.exists('config.json'):
         with open('config.json', 'r') as file:
@@ -30,15 +44,19 @@ async def init():
     if os.path.exists('db.json'):
         with open('db.json', 'r') as file:
             guilds = json.loads(file.read())
-    if len(guilds.keys()):
+        
+        if len(guilds.keys()):
             for guild in guilds:
+                lastUpdate[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                         except Exception as e: print(e)
+                    lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'players': None}
     
-    loop.create_task(ping())
-    loop.create_task(update())
+    pingTask = loop.create_task(ping())
+    updateTask = loop.create_task(update())
+    dbUpdaterTask = loop.create_task(db_updater())
     loop.create_task(crash_handler())
 
 @client.event
@@ -48,11 +66,13 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    global dbUpdate
+
     if message.author == client.user:
         return
 
     if message.content.startswith('$ping'):
-        if dt.now() - updateCheck < td(seconds=config['updateInterval']+60) and dt.now() - pingCheck < td(seconds=config['pingInterval']+60):
+        if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
             await message.channel.send('MC Status Bot is running')
         else: await message.channel.send('An error has occured in MC Status Bot (a loop is not running)')
 
@@ -89,10 +109,14 @@ async def on_message(message):
                     playChan = await message.guild.create_text_channel('players', category=newCat)
                     await playChan.set_permissions(client.user, send_messages=True)
                     await playChan.set_permissions(message.guild.default_role, send_messages=False)
+                    msg = await client.get_channel(id=playChan.id).send('Pinging...')
             except Exception as e: await message.channel.send('Error: ' + str(e))
             else:
-                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': None, 'lastUpdate': {'time': None, 'status': None, 'players': None}})
+                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': msg.id})
+                if str(message.guild.id) not in lastUpdate.keys(): lastUpdate[str(message.guild.id)] = {}
+                lastUpdate[str(message.guild.id)][message.content.split(' ')[1]] = {'statusTime': None, 'status': None, 'players': None}
                 await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
+                dbUpdate = True
     
     if message.content.startswith('$rem'):
         if (str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels) \
@@ -113,10 +137,11 @@ async def on_message(message):
                             await client.get_channel(id=guilds[str(message.guild.id)][c]['playersChannel']).delete()
                         if client.get_channel(id=guilds[str(message.guild.id)][c]['category']) is not None:
                             await client.get_channel(id=guilds[str(message.guild.id)][c]['category']).delete()
-                    except Exception as e: print(e)
+                    except Exception as e: await message.channel.send('Error: ' + str(e))
                     
                     guilds[str(message.guild.id)].pop(c)
                     await message.channel.send('Removed {}\'s status from this guild'.format(message.content.split(' ')[1]))
+                    dbUpdate = True
                     break
     
     if message.content.startswith('$list'):
@@ -132,7 +157,6 @@ async def on_message(message):
 
 
 async def ping():
-    global pingCheck
     while True:
         for guild in guilds:
             for server in guilds[guild]:
@@ -142,13 +166,10 @@ async def ping():
                         servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
                     except Exception:
                         servers[server['address']]['reply'] = None
-
-                    pingCheck = dt.now()
                 await asyncio.sleep(0)
         await asyncio.sleep(1)
 
 async def update():
-    global updateCheck
     while True:
         for guild in guilds:
             for server in guilds[guild]:
@@ -167,37 +188,35 @@ async def update():
                     status = '🔴 OFFLINE'
 
                 try:
-                    if (server['lastUpdate']['time'] is None or dt.now() - dt.fromisoformat(server['lastUpdate']['time']) >= td(minutes=5)) \
-                        and status != server['lastUpdate']['status'] and client.get_channel(id=server['statusChannel']) is not None:
-                            server['lastUpdate']['time'] = dt.isoformat(dt.now())
-                            server['lastUpdate']['status'] = status
+                    if (lastUpdate[guild][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(minutes=5)) \
+                        and status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
+                            lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
+                            lastUpdate[guild][server['address']]['status'] = status
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
-                    if config['showPlayers'] and players != server['lastUpdate']['players'] and client.get_channel(id=server['playersChannel']) is not None:
-                        server['lastUpdate']['players'] = players
-                        if server['message'] is None or client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is None:
-                            message = await client.get_channel(id=server['playersChannel']).send(players)
-                            server['message'] = message.id
-                        else:
+                    if config['showPlayers'] and players != lastUpdate[guild][server['address']]['players'] and client.get_channel(id=server['playersChannel']) is not None:
+                        lastUpdate[guild][server['address']]['players'] = players
+                        if not (server['message'] is None or client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is None):
                             await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                 except Exception as e: print(e)
-                
                 await asyncio.sleep(0)
 
-        with open('db.json', 'w') as file:
-            file.write(json.dumps(guilds))
-
-        updateCheck = dt.now()
+        with open('lastUpdate.json', 'w') as file:
+            file.write(json.dumps(lastUpdate))
         await asyncio.sleep(config['updateInterval'])
 
 async def crash_handler():
     while True:
         await asyncio.sleep(10)
-        if dt.now() - updateCheck >= td(seconds=config['updateInterval']+60):
+        if updateTask.done():
             loop.create_task(update())
             print('Restarted update loop')
-        if dt.now() - pingCheck >= td(seconds=config['pingInterval']+60):
+        if pingTask.done():
             loop.create_task(ping())
             print('Restarted ping loop')
+        if dbUpdaterTask.done():
+            loop.create_task(db_updater())
+            print('Restarted db_updater loop')
 
 async def login():
     try:
