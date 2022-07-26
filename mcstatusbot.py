@@ -82,7 +82,7 @@ async def on_message(message):
     if message.content.startswith('$ping'):
         if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
             await message.channel.send('MC Status Bot is running')
-        else: await message.channel.send('An error has occured in MC Status Bot (a loop is not running)')
+        else: await message.channel.send('An error has occured in MC Status Bot (task(s) not running)')
     
     if message.content.startswith('$help'):
         await message.channel.send('https://github.com/dsampinski/mcstatusbot#commands')
@@ -240,13 +240,13 @@ async def crash_handler():
         await asyncio.sleep(10)
         if updateTask.done():
             loop.create_task(update())
-            print('Restarted update loop')
+            print('Restarted update task')
         if pingTask.done():
             loop.create_task(ping())
-            print('Restarted ping loop')
+            print('Restarted ping task')
         if dbUpdaterTask.done():
             loop.create_task(db_updater())
-            print('Restarted db_updater loop')
+            print('Restarted db_updater task')
 
 async def login():
     try:
