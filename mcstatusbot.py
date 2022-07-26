@@ -53,7 +53,7 @@ async def init():
                 if not os.path.exists('lastUpdate.dat'): lastUpdate[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
-                        try: servers[server['address']] = {'lookup': await js.async_lookup(server['address'], timeout=1), 'time': None, 'reply': None}
+                        try: servers[server['address']] = {'lookup': await js.async_lookup(server['address'], timeout=2), 'time': None, 'reply': None}
                         except Exception as e: print(e)
                     if not os.path.exists('lastUpdate.dat'): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
             
@@ -127,7 +127,7 @@ async def on_message(message):
 
         try:
             if message.content.split(' ')[1] not in servers.keys():
-                servers[message.content.split(' ')[1]] = {'lookup': await js.async_lookup(message.content.split(' ')[1], timeout=1), 'time': None, 'reply': None}
+                servers[message.content.split(' ')[1]] = {'lookup': await js.async_lookup(message.content.split(' ')[1], timeout=2), 'time': None, 'reply': None}
         except Exception as e: await message.channel.send('Error: ' + str(e))
         else:
             try:
