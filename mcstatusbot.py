@@ -22,7 +22,7 @@ async def db_updater():
             with open('db.json', 'w') as file:
                 file.write(json.dumps(guilds))
             dbUpdate = False
-        with open('lastUpdate.json', 'w') as file:
+        with open('lastUpdate.dat', 'w') as file:
             file.write(json.dumps(lastUpdate))
         await asyncio.sleep(10)
 
@@ -55,8 +55,8 @@ async def init():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address'], timeout=1), 'time': None, 'reply': None}
                         except Exception as e: print(e)
             
-            if os.path.exists('lastUpdate.json'):
-                with open('lastUpdate.json', 'r') as file:
+            if os.path.exists('lastUpdate.dat'):
+                with open('lastUpdate.dat', 'r') as file:
                     lastUpdate = json.loads(file.read())
     
     pingTask = loop.create_task(ping())
