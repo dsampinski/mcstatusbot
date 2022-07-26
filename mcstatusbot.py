@@ -50,10 +50,12 @@ async def init():
         
         if len(guilds.keys()):
             for guild in guilds:
+                if not os.path.exists('lastUpdate.dat'): lastUpdate[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address'], timeout=1), 'time': None, 'reply': None}
                         except Exception as e: print(e)
+                    if not os.path.exists('lastUpdate.dat'): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
             
             if os.path.exists('lastUpdate.dat'):
                 with open('lastUpdate.dat', 'r') as file:
