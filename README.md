@@ -40,7 +40,7 @@ Maximum amount of servers that can be added per guild (bypassed by the bot's adm
 Whether to show the players list or not
 
 # Commands
-## Everybody
+## Everyone
 > $ping
 
 Ping the bot for its status
