@@ -67,4 +67,4 @@ Reload the bot's config file
 
 Shutdown the bot
 
-**The bot must have permission to manage channels*
+**The bot must have permission to manage channels and roles*
