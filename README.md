@@ -29,7 +29,7 @@ Interval (in seconds) between each server ping
 
 > playersInterval
 
-Interval (in seconds) between each player list update (the status update interval is constant at 5 minutes)
+Interval (in seconds) between each players list update (the status update interval is constant at 5 minutes)
 
 > addressesPerGuild
 
