@@ -107,8 +107,7 @@ async def on_message(message):
             file.write(json.dumps(guilds))
 
     if message.content.startswith('$add'):
-        if (str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels) \
-            or not message.guild.get_member(client.user.id).guild_permissions.manage_channels:
+        if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 3:
@@ -149,8 +148,7 @@ async def on_message(message):
                 dbUpdate = True
     
     if message.content.startswith('$rem'):
-        if (str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels) \
-            or not message.guild.get_member(client.user.id).guild_permissions.manage_channels:
+        if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 2:
