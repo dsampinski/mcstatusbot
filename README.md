@@ -4,15 +4,10 @@ A simple Python Discord bot that displays Minecraft servers' statuses and player
 # Setup
     A Python installation is required
 
-`git clone https://github.com/dsampinski/mcstatusbot.git && cd mcstatusbot`
-
 `pip install -r requirements.txt`
 
 ## Run
 `python mcstatusbot.py`
-
-## Update
-`git pull`
 
 # Config
 > token
