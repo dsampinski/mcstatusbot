@@ -29,7 +29,7 @@ Interval (in seconds) between each server ping
 
 > updateInterval
 
-Interval (in seconds) between each Discord status update (the voice channel update interval is constant at 5 minutes)
+Interval (in seconds) between each player list update (the status update interval is constant at 5 minutes)
 
 > addressesPerGuild
 
