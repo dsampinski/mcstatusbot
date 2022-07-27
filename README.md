@@ -27,7 +27,7 @@ The Discord ID of the bot's admin (to bypass restrictions)
 
 Interval (in seconds) between each server ping
 
-> updateInterval
+> playersInterval
 
 Interval (in seconds) between each player list update (the status update interval is constant at 5 minutes)
 
