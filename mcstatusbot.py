@@ -8,7 +8,7 @@ from datetime import datetime as dt, timedelta as td
 intents = discord.Intents.default()
 intents.members = True
 client = discord.Client(intents=intents)
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'playersInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 lastUpdate = {}
 servers = {}
@@ -217,13 +217,13 @@ async def update():
 
                 try:
                     if (lastUpdate[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(minutes=5)) \
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(seconds=max(300, config['updateInterval']))) \
                         and status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
                             lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['status'] = status
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
                     if config['showPlayers'] and (lastUpdate[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['playersInterval'])) \
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['updateInterval'])) \
                         and players != lastUpdate[guild][server['address']]['players'] and client.get_channel(id=server['playersChannel']) is not None \
                         and server['message'] is not None and client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
                             lastUpdate[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
