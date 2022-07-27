@@ -24,7 +24,7 @@ async def db_updater():
             dbUpdate = False
         with open('lastUpdate.dat', 'w') as file:
             file.write(json.dumps(lastUpdate))
-        await asyncio.sleep(300)
+        await asyncio.sleep(60)
 
 
 async def init():
