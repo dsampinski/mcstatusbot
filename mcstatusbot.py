@@ -4,7 +4,7 @@ from mcstatus.server import JavaServer as js
 import os
 import json
 from datetime import datetime as dt, timedelta as td
-from lib.keylock import keylock as kl
+from utils.keylock import keylock as kl
 
 intents = discord.Intents.default()
 intents.members = True
