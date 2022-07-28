@@ -201,34 +201,31 @@ async def update():
     while True:
         for guild in guilds:
             for server in guilds[guild]:
+                if servers[server['address']]['reply'] is not None:
+                    if servers[server['address']]['reply'].players.sample is not None:
+                        if config['showPlayers']:
+                            players = 'Players:\n\n'
+                            for player in servers[server['address']]['reply'].players.sample:
+                                players += player.name + '\n'
+                        status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
+                    else:
+                        if config['showPlayers']: players = 'EMPTY'
+                        status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
+                else:
+                    if config['showPlayers']: players = 'OFFLINE'
+                    status = '🔴 OFFLINE'
+
                 try:
                     if (lastUpdate[guild][server['address']]['statusTime'] is None \
                         or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(seconds=max(300, config['updateInterval']))) \
                         and status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
-
-                            if servers[server['address']]['reply'] is not None:
-                                if servers[server['address']]['reply'].players.sample is not None:
-                                    status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
-                                else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
-                            else: status = '🔴 OFFLINE'
-
                             lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['status'] = status
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
-                    
                     if config['showPlayers'] and (lastUpdate[guild][server['address']]['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['updateInterval'])) \
                         and players != lastUpdate[guild][server['address']]['players'] and client.get_channel(id=server['playersChannel']) is not None \
                         and server['message'] is not None and client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
-
-                            if servers[server['address']]['reply'] is not None:
-                                if servers[server['address']]['reply'].players.sample is not None:
-                                    players = 'Players:\n\n'
-                                    for player in servers[server['address']]['reply'].players.sample:
-                                        players += player.name + '\n'
-                                else: players = 'EMPTY'
-                            else: players = 'OFFLINE'
-
                             lastUpdate[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['players'] = players
                             await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
