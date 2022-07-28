@@ -6,9 +6,7 @@ import json
 from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 
-intents = discord.Intents.default()
-intents.members = True
-client = discord.Client(intents=intents)
+client = discord.Client()
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 lastUpdate = {}
@@ -56,12 +54,12 @@ async def init():
                     lastUpdate = json.loads(file.read())
             
             for guild in guilds:
-                if not os.path.exists('lastUpdate.dat') or guild not in lastUpdate.keys(): lastUpdate[guild] = {}
+                if guild not in lastUpdate.keys(): lastUpdate[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                         except Exception as e: print(e)
-                    if not os.path.exists('lastUpdate.dat') or server['address'] not in lastUpdate[guild].keys(): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+                    if server['address'] not in lastUpdate[guild].keys(): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
     
     pingTask = loop.create_task(ping())
     updateTask = loop.create_task(update())
@@ -71,7 +69,7 @@ async def init():
 @client.event
 async def on_ready():
     print('Logged in as {0.user}'.format(client))
-    print('Admin:', client.get_user(int(config['adminId']) if config['adminId'].isnumeric() else None), '\n')
+    print('Admin:', await client.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
 @client.event
 async def on_message(message):
@@ -86,10 +84,10 @@ async def on_message(message):
             await message.channel.send('MC Status Bot is running')
         else: await message.channel.send('An error has occured in MC Status Bot (task(s) not running)')
     
-    if message.content.startswith('$help'):
+    elif message.content.startswith('$help'):
         await message.channel.send('https://github.com/dsampinski/mcstatusbot#commands')
     
-    if message.content.startswith('$reload'):
+    elif message.content.startswith('$reload'):
         if str(message.author.id) != config['adminId']:
             return
         if os.path.exists('config.json'):
@@ -100,7 +98,7 @@ async def on_message(message):
                 file.write(json.dumps(config))
         await message.channel.send('Reloaded config')
 
-    if message.content.startswith('$shutdown'):
+    elif message.content.startswith('$shutdown'):
         if str(message.author.id) != config['adminId']:
             return
         await message.channel.send('Shutting down...')
@@ -108,8 +106,9 @@ async def on_message(message):
         with open('db.json', 'w') as file:
             file.write(json.dumps(guilds))
 
-    if message.content.startswith('$add'):
-        if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
+    elif message.content.startswith('$add'):
+        member = await message.guild.fetch_member(message.author.id)
+        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 3:
@@ -153,8 +152,9 @@ async def on_message(message):
                 dbUpdate = True
         finally: lock.release(message.guild.id)
 
-    if message.content.startswith('$rem'):
-        if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
+    elif message.content.startswith('$rem'):
+        member = await message.guild.fetch_member(message.author.id)
+        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 2:
@@ -180,8 +180,9 @@ async def on_message(message):
                     break
         lock.release(message.guild.id)
     
-    if message.content.startswith('$list'):
-        if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
+    elif message.content.startswith('$list'):
+        member = await message.guild.fetch_member(message.author.id)
+        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
 
