@@ -1,6 +1,8 @@
 # MC Status Bot
 A simple Python Discord bot that displays Minecraft servers' statuses and players
 
+You can [add the public bot to your Discord](https://discord.com/oauth2/authorize?client_id=1001671313393463358&permissions=268435472&scope=bot)
+
 # Setup
     A Python installation is required
 
