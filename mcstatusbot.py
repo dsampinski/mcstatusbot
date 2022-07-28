@@ -4,6 +4,7 @@ from mcstatus.server import JavaServer as js
 import os
 import json
 from datetime import datetime as dt, timedelta as td
+from lib.keylock import keylock as kl
 
 intents = discord.Intents.default()
 intents.members = True
@@ -13,6 +14,7 @@ guilds = {}
 lastUpdate = {}
 servers = {}
 dbUpdate = True
+lock = kl()
 
 async def db_updater():
     global dbUpdate
@@ -114,13 +116,16 @@ async def on_message(message):
             await message.channel.send('Invalid arguments\n$add <address> <name>')
             return
 
+        await lock.acquire(message.guild.id)
         if str(message.guild.id) in guilds.keys():
             for server in guilds[str(message.guild.id)]:
                 if message.content.split(' ')[1] == server['address']:
                     await message.channel.send('Address is already added')
+                    lock.release(message.guild.id)
                     return
             if str(message.author.id) != config['adminId'] and len(guilds[str(message.guild.id)]) >= config['addressesPerGuild']:
                 await message.channel.send('Reached maximum amount of addresses in this guild')
+                lock.release(message.guild.id)
                 return
         else: guilds[str(message.guild.id)] = []
 
@@ -146,7 +151,8 @@ async def on_message(message):
                 if message.content.split(' ')[1] not in lastUpdate[str(message.guild.id)].keys(): lastUpdate[str(message.guild.id)][message.content.split(' ')[1]] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
                 await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
                 dbUpdate = True
-    
+        finally: lock.release(message.guild.id)
+
     if message.content.startswith('$rem'):
         if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
@@ -155,6 +161,7 @@ async def on_message(message):
             await message.channel.send('Invalid arguments\n$rem <address>')
             return
 
+        await lock.acquire(message.guild.id)
         if str(message.guild.id) in guilds.keys() and len(guilds[str(message.guild.id)]):
             for c, server in enumerate(guilds[str(message.guild.id)]):
                 if server['address'] == message.content.split(' ')[1]:
@@ -171,17 +178,20 @@ async def on_message(message):
                     await message.channel.send('Removed {}\'s status from this guild'.format(message.content.split(' ')[1]))
                     dbUpdate = True
                     break
+        lock.release(message.guild.id)
     
     if message.content.startswith('$list'):
         if str(message.author.id) != config['adminId'] and not message.guild.get_member(message.author.id).guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
 
+        await lock.acquire(message.guild.id)
         if str(message.guild.id) in guilds.keys():
             addresses = 'Addresses added to this guild:\n'
             for server in guilds[str(message.guild.id)]:
                 addresses += server['address'] + '\n'
             await message.channel.send(addresses)
+        lock.release(message.guild.id)
 
 
 async def ping():
@@ -201,31 +211,31 @@ async def update():
     while True:
         for guild in guilds:
             for server in guilds[guild]:
-                if servers[server['address']]['reply'] is not None:
-                    if servers[server['address']]['reply'].players.sample is not None:
-                        if config['showPlayers']:
-                            players = 'Players:\n\n'
-                            for player in servers[server['address']]['reply'].players.sample:
-                                players += player.name + '\n'
-                        status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
-                    else:
-                        if config['showPlayers']: players = 'EMPTY'
-                        status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
-                else:
-                    if config['showPlayers']: players = 'OFFLINE'
-                    status = '🔴 OFFLINE'
-
                 try:
-                    if (lastUpdate[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(seconds=max(300, config['updateInterval']))) \
-                        and status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
+                    if lastUpdate[guild][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(seconds=max(300, config['updateInterval'])):
+                        if servers[server['address']]['reply'] is not None:
+                            if servers[server['address']]['reply'].players.sample is not None:
+                                status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
+                            else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
+                        else: status = '🔴 OFFLINE'
+                        if status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
                             lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['status'] = status
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
-                    if config['showPlayers'] and (lastUpdate[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['updateInterval'])) \
-                        and players != lastUpdate[guild][server['address']]['players'] and client.get_channel(id=server['playersChannel']) is not None \
-                        and server['message'] is not None and client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
+
+                    if config['showPlayers'] and server['message'] is not None and (lastUpdate[guild][server['address']]['playersTime'] is None \
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['updateInterval'])):
+                        if servers[server['address']]['reply'] is not None:
+                            if servers[server['address']]['reply'].players.sample is not None:
+                                players = 'Players:\n\n'
+                                for player in servers[server['address']]['reply'].players.sample:
+                                    players += player.name + '\n'
+                            else: players = 'EMPTY'
+                        else: players = 'OFFLINE'
+                        if players != lastUpdate[guild][server['address']]['players'] \
+                            and client.get_channel(id=server['playersChannel']) is not None \
+                            and client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
                             lastUpdate[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['players'] = players
                             await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
