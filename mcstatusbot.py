@@ -54,12 +54,12 @@ async def init():
                     lastUpdate = json.loads(file.read())
             
             for guild in guilds:
-                if not os.path.exists('lastUpdate.dat') or guild not in lastUpdate.keys(): lastUpdate[guild] = {}
+                if guild not in lastUpdate.keys(): lastUpdate[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                         except Exception as e: print(e)
-                    if not os.path.exists('lastUpdate.dat') or server['address'] not in lastUpdate[guild].keys(): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+                    if server['address'] not in lastUpdate[guild].keys(): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
     
     pingTask = loop.create_task(ping())
     updateTask = loop.create_task(update())
