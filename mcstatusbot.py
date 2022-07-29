@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 import asyncio
 from mcstatus.server import JavaServer as js
 import os
@@ -6,7 +7,7 @@ import json
 from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 
-client = discord.Client()
+bot = commands.Bot('$')
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 lastUpdate = {}
@@ -66,137 +67,139 @@ async def init():
     dbUpdaterTask = loop.create_task(db_updater())
     loop.create_task(crash_handler())
 
-@client.event
+@bot.event
 async def on_ready():
-    print('Logged in as {0.user}'.format(client))
-    print('Admin:', await client.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
+    print('Logged in as {0.user}'.format(bot))
+    print('Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@client.event
-async def on_message(message):
+@bot.command()
+async def ping(ctx):
+    if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
+        await ctx.send('MC Status Bot is running')
+    else: await ctx.send('An error has occured in MC Status Bot (task(s) not running)')
+
+@bot.command()
+async def reload(ctx):
     global config
+
+    if str(ctx.author.id) != config['adminId']:
+        return
+    if os.path.exists('config.json'):
+        with open('config.json', 'r') as file:
+            config = json.loads(file.read())
+    else:
+        with open('config.json', 'w') as file:
+            file.write(json.dumps(config))
+    await ctx.send('Reloaded config')
+
+@bot.command()
+async def shutdown(ctx):
+    if str(ctx.author.id) != config['adminId']:
+        return
+    await ctx.send('Shutting down...')
+    loop.stop()
+    with open('db.json', 'w') as file:
+        file.write(json.dumps(guilds))
+
+@bot.command()
+async def add(ctx, address, name):
     global dbUpdate
 
-    if message.author == client.user:
+    if not isinstance(ctx.author, discord.member.Member):
+        return
+    if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
+        await ctx.send('Not enough permissions')
         return
 
-    if message.content.startswith('$ping'):
-        if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
-            await message.channel.send('MC Status Bot is running')
-        else: await message.channel.send('An error has occured in MC Status Bot (task(s) not running)')
-    
-    elif message.content.startswith('$help'):
-        await message.channel.send('https://github.com/dsampinski/mcstatusbot#commands')
-    
-    elif message.content.startswith('$reload'):
-        if str(message.author.id) != config['adminId']:
-            return
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as file:
-                config = json.loads(file.read())
-        else:
-            with open('config.json', 'w') as file:
-                file.write(json.dumps(config))
-        await message.channel.send('Reloaded config')
-
-    elif message.content.startswith('$shutdown'):
-        if str(message.author.id) != config['adminId']:
-            return
-        await message.channel.send('Shutting down...')
-        loop.stop()
-        with open('db.json', 'w') as file:
-            file.write(json.dumps(guilds))
-
-    elif message.content.startswith('$add'):
-        if not isinstance(message.author, discord.member.Member):
-            return
-        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
-            await message.channel.send('Not enough permissions')
-            return
-        if len(message.content.split(' ')) != 3:
-            await message.channel.send('Invalid arguments\n$add <address> <name>')
-            return
-
-        await lock.acquire(message.guild.id)
-        if str(message.guild.id) in guilds.keys():
-            for server in guilds[str(message.guild.id)]:
-                if message.content.split(' ')[1] == server['address']:
-                    await message.channel.send('Address is already added')
-                    lock.release(message.guild.id)
-                    return
-            if str(message.author.id) != config['adminId'] and len(guilds[str(message.guild.id)]) >= config['addressesPerGuild']:
-                await message.channel.send('Reached maximum amount of addresses in this guild')
-                lock.release(message.guild.id)
+    await lock.acquire(ctx.guild.id)
+    if str(ctx.guild.id) in guilds.keys():
+        for server in guilds[str(ctx.guild.id)]:
+            if address == server['address']:
+                await ctx.send('Address is already added')
+                lock.release(ctx.guild.id)
                 return
-        else: guilds[str(message.guild.id)] = []
+        if str(ctx.author.id) != config['adminId'] and len(guilds[str(ctx.guild.id)]) >= config['addressesPerGuild']:
+            await ctx.send('Reached maximum amount of addresses in this guild')
+            lock.release(ctx.guild.id)
+            return
+    else: guilds[str(ctx.guild.id)] = []
 
+    try:
+        if address not in servers.keys():
+            servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
+    except Exception as e: await ctx.send('Error: ' + str(e))
+    else:
         try:
-            if message.content.split(' ')[1] not in servers.keys():
-                servers[message.content.split(' ')[1]] = {'lookup': await js.async_lookup(message.content.split(' ')[1]), 'time': None, 'reply': None}
-        except Exception as e: await message.channel.send('Error: ' + str(e))
+            newCat = await ctx.guild.create_category(name)
+            statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
+            await statChan.set_permissions(bot.user, connect=True)
+            await statChan.set_permissions(ctx.guild.default_role, connect=False)
+            if config['showPlayers']:
+                playChan = await ctx.guild.create_text_channel('players', category=newCat)
+                await playChan.set_permissions(bot.user, send_messages=True)
+                await playChan.set_permissions(ctx.guild.default_role, send_messages=False)
+                msg = await bot.get_channel(id=playChan.id).send('Pinging...')
+        except Exception as e: await ctx.send('Error: ' + str(e))
         else:
-            try:
-                newCat = await message.guild.create_category(message.content.split(' ')[2])
-                statChan = await message.guild.create_voice_channel('Pinging...', category=newCat)
-                await statChan.set_permissions(client.user, connect=True)
-                await statChan.set_permissions(message.guild.default_role, connect=False)
-                if config['showPlayers']:
-                    playChan = await message.guild.create_text_channel('players', category=newCat)
-                    await playChan.set_permissions(client.user, send_messages=True)
-                    await playChan.set_permissions(message.guild.default_role, send_messages=False)
-                    msg = await client.get_channel(id=playChan.id).send('Pinging...')
-            except Exception as e: await message.channel.send('Error: ' + str(e))
-            else:
-                guilds[str(message.guild.id)].append({'address': message.content.split(' ')[1], 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': (msg.id if config['showPlayers'] else None)})
-                if str(message.guild.id) not in lastUpdate.keys(): lastUpdate[str(message.guild.id)] = {}
-                if message.content.split(' ')[1] not in lastUpdate[str(message.guild.id)].keys(): lastUpdate[str(message.guild.id)][message.content.split(' ')[1]] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
-                await message.channel.send('Added {}\'s status to this guild'.format(message.content.split(' ')[1]))
+            guilds[str(ctx.guild.id)].append({'address': address, 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': (msg.id if config['showPlayers'] else None)})
+            if str(ctx.guild.id) not in lastUpdate.keys(): lastUpdate[str(ctx.guild.id)] = {}
+            if address not in lastUpdate[str(ctx.guild.id)].keys(): lastUpdate[str(ctx.guild.id)][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+            await ctx.send('Added {}\'s status to this guild'.format(address))
+            dbUpdate = True
+    finally: lock.release(ctx.guild.id)
+@add.error
+async def add_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send('Invalid arguments\n$add <address> <name>')
+
+@bot.command()
+async def rem(ctx, address):
+    global dbUpdate
+
+    if not isinstance(ctx.author, discord.member.Member):
+        return
+    if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
+        await ctx.send('Not enough permissions')
+        return
+
+    await lock.acquire(ctx.guild.id)
+    if str(ctx.guild.id) in guilds.keys() and len(guilds[str(ctx.guild.id)]):
+        for c, server in enumerate(guilds[str(ctx.guild.id)]):
+            if server['address'] == address:
+                try:
+                    if bot.get_channel(id=guilds[str(ctx.guild.id)][c]['statusChannel']) is not None:
+                        await bot.get_channel(id=guilds[str(ctx.guild.id)][c]['statusChannel']).delete()
+                    if bot.get_channel(id=guilds[str(ctx.guild.id)][c]['playersChannel']) is not None:
+                        await bot.get_channel(id=guilds[str(ctx.guild.id)][c]['playersChannel']).delete()
+                    if bot.get_channel(id=guilds[str(ctx.guild.id)][c]['category']) is not None:
+                        await bot.get_channel(id=guilds[str(ctx.guild.id)][c]['category']).delete()
+                except Exception as e: await ctx.send('Error: ' + str(e))
+                
+                guilds[str(ctx.guild.id)].pop(c)
+                await ctx.send('Removed {}\'s status from this guild'.format(address))
                 dbUpdate = True
-        finally: lock.release(message.guild.id)
+                break
+    lock.release(ctx.guild.id)
+@rem.error
+async def rem_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send('Invalid arguments\n$rem <address>')
 
-    elif message.content.startswith('$rem'):
-        if not isinstance(message.author, discord.member.Member):
-            return
-        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
-            await message.channel.send('Not enough permissions')
-            return
-        if len(message.content.split(' ')) != 2:
-            await message.channel.send('Invalid arguments\n$rem <address>')
-            return
+@bot.command()
+async def list(ctx):
+    if not isinstance(ctx.author, discord.member.Member):
+        return
+    if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
+        await ctx.send('Not enough permissions')
+        return
 
-        await lock.acquire(message.guild.id)
-        if str(message.guild.id) in guilds.keys() and len(guilds[str(message.guild.id)]):
-            for c, server in enumerate(guilds[str(message.guild.id)]):
-                if server['address'] == message.content.split(' ')[1]:
-                    try:
-                        if client.get_channel(id=guilds[str(message.guild.id)][c]['statusChannel']) is not None:
-                            await client.get_channel(id=guilds[str(message.guild.id)][c]['statusChannel']).delete()
-                        if client.get_channel(id=guilds[str(message.guild.id)][c]['playersChannel']) is not None:
-                            await client.get_channel(id=guilds[str(message.guild.id)][c]['playersChannel']).delete()
-                        if client.get_channel(id=guilds[str(message.guild.id)][c]['category']) is not None:
-                            await client.get_channel(id=guilds[str(message.guild.id)][c]['category']).delete()
-                    except Exception as e: await message.channel.send('Error: ' + str(e))
-                    
-                    guilds[str(message.guild.id)].pop(c)
-                    await message.channel.send('Removed {}\'s status from this guild'.format(message.content.split(' ')[1]))
-                    dbUpdate = True
-                    break
-        lock.release(message.guild.id)
-    
-    elif message.content.startswith('$list'):
-        if not isinstance(message.author, discord.member.Member):
-            return
-        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
-            await message.channel.send('Not enough permissions')
-            return
-
-        await lock.acquire(message.guild.id)
-        if str(message.guild.id) in guilds.keys():
-            addresses = 'Addresses added to this guild:\n'
-            for server in guilds[str(message.guild.id)]:
-                addresses += server['address'] + '\n'
-            await message.channel.send(addresses)
-        lock.release(message.guild.id)
-
+    await lock.acquire(ctx.guild.id)
+    if str(ctx.guild.id) in guilds.keys():
+        addresses = 'Addresses added to this guild:\n'
+        for server in guilds[str(ctx.guild.id)]:
+            addresses += server['address'] + '\n'
+        await ctx.send(addresses)
+    lock.release(ctx.guild.id)
 
 async def ping():
     while True:
@@ -223,10 +226,10 @@ async def update():
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != lastUpdate[guild][server['address']]['status'] and client.get_channel(id=server['statusChannel']) is not None:
+                        if status != lastUpdate[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
                             lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['status'] = status
-                            await client.get_channel(id=server['statusChannel']).edit(name=status)
+                            await bot.get_channel(id=server['statusChannel']).edit(name=status)
 
                     if config['showPlayers'] and server['message'] is not None and (lastUpdate[guild][server['address']]['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
@@ -238,11 +241,11 @@ async def update():
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
                         if players != lastUpdate[guild][server['address']]['players'] \
-                            and client.get_channel(id=server['playersChannel']) is not None \
-                            and client.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
+                            and bot.get_channel(id=server['playersChannel']) is not None \
+                            and bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
                             lastUpdate[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
                             lastUpdate[guild][server['address']]['players'] = players
-                            await client.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
+                            await bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                 except Exception as e: print(e)
                 await asyncio.sleep(0)
         await asyncio.sleep(1)
@@ -262,7 +265,7 @@ async def crash_handler():
 
 async def login():
     try:
-        await client.start(config['token'])
+        await bot.start(config['token'])
     except Exception as e:
         print(e)
         loop.stop()
