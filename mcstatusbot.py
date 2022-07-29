@@ -107,8 +107,7 @@ async def on_message(message):
             file.write(json.dumps(guilds))
 
     elif message.content.startswith('$add'):
-        member = await message.guild.fetch_member(message.author.id)
-        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
+        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 3:
@@ -153,8 +152,7 @@ async def on_message(message):
         finally: lock.release(message.guild.id)
 
     elif message.content.startswith('$rem'):
-        member = await message.guild.fetch_member(message.author.id)
-        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
+        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
         if len(message.content.split(' ')) != 2:
@@ -181,8 +179,7 @@ async def on_message(message):
         lock.release(message.guild.id)
     
     elif message.content.startswith('$list'):
-        member = await message.guild.fetch_member(message.author.id)
-        if str(message.author.id) != config['adminId'] and not member.guild_permissions.manage_channels:
+        if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
 
