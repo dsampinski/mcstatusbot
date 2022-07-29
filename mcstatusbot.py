@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
+import mcstatus
 from mcstatus.server import JavaServer as js
 import os
 import json
@@ -72,13 +73,13 @@ async def on_ready():
     print('Logged in as {0.user}'.format(bot))
     print('Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@bot.command()
+@bot.command(help='Ping the bot for its status', brief='Ping')
 async def ping(ctx):
     if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
         await ctx.send('MC Status Bot is running')
     else: await ctx.send('An error has occured in MC Status Bot (task(s) not running)')
 
-@bot.command()
+@bot.command(hidden=True, help='Reload the bot\'s config file', brief='Reload config')
 async def reload(ctx):
     global config
 
@@ -92,7 +93,7 @@ async def reload(ctx):
             file.write(json.dumps(config))
     await ctx.send('Reloaded config')
 
-@bot.command()
+@bot.command(hidden=True, help='Shutdown the bot', brief='Shutdown bot')
 async def shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
@@ -101,7 +102,7 @@ async def shutdown(ctx):
     with open('db.json', 'w') as file:
         file.write(json.dumps(guilds))
 
-@bot.command()
+@bot.command(help='Add a server\'s status to the guild', brief='Add server')
 async def add(ctx, address, name):
     global dbUpdate
 
@@ -152,7 +153,7 @@ async def add_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$add <address> <name>')
 
-@bot.command()
+@bot.command(help='Remove a server\'s status from the guild', brief='Remove server')
 async def rem(ctx, address):
     global dbUpdate
 
@@ -185,7 +186,7 @@ async def rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$rem <address>')
 
-@bot.command()
+@bot.command(help='List all servers in the guild', brief='List servers')
 async def list(ctx):
     if not isinstance(ctx.author, discord.member.Member):
         return
@@ -207,10 +208,8 @@ async def ping():
             for server in guilds[guild]:
                 if servers[server['address']]['time'] is None or dt.now() - servers[server['address']]['time'] >= td(minutes=config['pingInterval']):
                     servers[server['address']]['time'] = dt.now()
-                    try:
-                        servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
-                    except Exception:
-                        servers[server['address']]['reply'] = None
+                    try: servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
+                    except Exception: servers[server['address']]['reply'] = 'offline'
                 await asyncio.sleep(0)
         await asyncio.sleep(1)
 
@@ -218,10 +217,11 @@ async def update():
     while True:
         for guild in guilds:
             for server in guilds[guild]:
+                if servers[server['address']]['reply'] is None: continue
                 try:
                     if lastUpdate[guild][server['address']]['statusTime'] is None \
                         or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
-                        if servers[server['address']]['reply'] is not None:
+                        if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
@@ -233,7 +233,7 @@ async def update():
 
                     if config['showPlayers'] and server['message'] is not None and (lastUpdate[guild][server['address']]['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
-                        if servers[server['address']]['reply'] is not None:
+                        if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
                                 for player in servers[server['address']]['reply'].players.sample:
