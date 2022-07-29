@@ -44,7 +44,7 @@ Ping the bot for its status
 
 > $help
 
-Links to this page
+Shows help
 
 ## Users with permission to manage channels
 > $add *address name*
