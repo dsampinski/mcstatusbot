@@ -22,11 +22,11 @@ The Discord ID of the bot's admin (to bypass restrictions)
 
 > pingInterval
 
-Interval (in seconds) between each server ping
+Interval (in minutes) between each server ping
 
 > updateInterval
 
-Interval (in seconds) between each status update
+Interval (in minutes) between each status update
 
 > addressesPerGuild
 

@@ -7,7 +7,7 @@ from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 
 client = discord.Client()
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 60, 'updateInterval': 60, 'addressesPerGuild': 2, 'showPlayers': True}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 lastUpdate = {}
 servers = {}
@@ -107,6 +107,8 @@ async def on_message(message):
             file.write(json.dumps(guilds))
 
     elif message.content.startswith('$add'):
+        if not isinstance(message.author, discord.member.Member):
+            return
         if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
@@ -152,6 +154,8 @@ async def on_message(message):
         finally: lock.release(message.guild.id)
 
     elif message.content.startswith('$rem'):
+        if not isinstance(message.author, discord.member.Member):
+            return
         if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
@@ -179,6 +183,8 @@ async def on_message(message):
         lock.release(message.guild.id)
     
     elif message.content.startswith('$list'):
+        if not isinstance(message.author, discord.member.Member):
+            return
         if str(message.author.id) != config['adminId'] and not message.author.guild_permissions.manage_channels:
             await message.channel.send('Not enough permissions')
             return
@@ -196,7 +202,7 @@ async def ping():
     while True:
         for guild in guilds:
             for server in guilds[guild]:
-                if servers[server['address']]['time'] is None or dt.now() - servers[server['address']]['time'] >= td(seconds=config['pingInterval']):
+                if servers[server['address']]['time'] is None or dt.now() - servers[server['address']]['time'] >= td(minutes=config['pingInterval']):
                     servers[server['address']]['time'] = dt.now()
                     try:
                         servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
@@ -211,7 +217,7 @@ async def update():
             for server in guilds[guild]:
                 try:
                     if lastUpdate[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(seconds=max(300, config['updateInterval'])):
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
                         if servers[server['address']]['reply'] is not None:
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
@@ -223,7 +229,7 @@ async def update():
                             await client.get_channel(id=server['statusChannel']).edit(name=status)
 
                     if config['showPlayers'] and server['message'] is not None and (lastUpdate[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(seconds=config['updateInterval'])):
+                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] is not None:
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
