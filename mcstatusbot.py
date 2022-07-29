@@ -7,7 +7,7 @@ from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 
 client = discord.Client()
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 10, 'updateInterval': 10, 'addressesPerGuild': 2, 'showPlayers': True}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 60, 'updateInterval': 60, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
 lastUpdate = {}
 servers = {}
