@@ -7,6 +7,6 @@ class keylock:
         while key in self.keys.keys(): await asyncio.sleep(0)
         self.keys[key] = None
     def release(self, key):
-        self.keys.pop(key)
+        if key in self.keys.keys(): self.keys.pop(key)
     def reset(self):
         self.keys = {}

@@ -7,14 +7,15 @@ import os
 import json
 from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
+from utils.cache import cache as c
 
 bot = commands.Bot('$')
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'addressesPerGuild': 2, 'showPlayers': True}
 guilds = {}
-lastUpdate = {}
 servers = {}
 dbUpdate = True
 lock = kl()
+cache = c()
 
 async def db_updater():
     global dbUpdate
@@ -24,15 +25,12 @@ async def db_updater():
             with open('db.json', 'w') as file:
                 file.write(json.dumps(guilds))
             dbUpdate = False
-        with open('lastUpdate.dat', 'w') as file:
-            file.write(json.dumps(lastUpdate))
-        await asyncio.sleep(60)
+        await asyncio.sleep(10)
 
 
 async def init():
     global config
     global guilds
-    global lastUpdate
     global pingTask
     global updateTask
     global dbUpdaterTask
@@ -51,17 +49,16 @@ async def init():
             guilds = json.loads(file.read())
         
         if len(guilds.keys()):
-            if os.path.exists('lastUpdate.dat'):
-                with open('lastUpdate.dat', 'r') as file:
-                    lastUpdate = json.loads(file.read())
-            
             for guild in guilds:
-                if guild not in lastUpdate.keys(): lastUpdate[guild] = {}
+                if os.path.exists('./cache/update/'+guild):
+                    with open('./cache/update/'+guild, 'r') as file:
+                        cache.update[guild] = json.loads(file.read())
+                else: cache.update[guild] = {}
                 for server in guilds[guild]:
                     if server['address'] not in servers.keys():
                         try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                         except Exception as e: print(e)
-                    if server['address'] not in lastUpdate[guild].keys(): lastUpdate[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+                    if server['address'] not in cache.update[guild].keys(): cache.update[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
     
     pingTask = loop.create_task(ping())
     updateTask = loop.create_task(update())
@@ -70,8 +67,8 @@ async def init():
 
 @bot.event
 async def on_ready():
-    print('Logged in as {0.user}'.format(bot))
-    print('Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
+    print('--Logged in as {0.user}'.format(bot))
+    print('--Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
 @bot.command(help='Ping the bot for its status', brief='Ping')
 async def ping(ctx):
@@ -143,8 +140,8 @@ async def add(ctx, address, name):
         except Exception as e: await ctx.send('Error: ' + str(e))
         else:
             guilds[str(ctx.guild.id)].append({'address': address, 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': (msg.id if config['showPlayers'] else None)})
-            if str(ctx.guild.id) not in lastUpdate.keys(): lastUpdate[str(ctx.guild.id)] = {}
-            if address not in lastUpdate[str(ctx.guild.id)].keys(): lastUpdate[str(ctx.guild.id)][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+            if str(ctx.guild.id) not in cache.update.keys(): cache.update[str(ctx.guild.id)] = {}
+            if address not in cache.update[str(ctx.guild.id)].keys(): cache.update[str(ctx.guild.id)][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
             await ctx.send('Added {}\'s status to this guild'.format(address))
             dbUpdate = True
     finally: lock.release(ctx.guild.id)
@@ -164,7 +161,7 @@ async def rem(ctx, address):
         return
 
     await lock.acquire(ctx.guild.id)
-    if str(ctx.guild.id) in guilds.keys() and len(guilds[str(ctx.guild.id)]):
+    if str(ctx.guild.id) in guilds.keys():
         for c, server in enumerate(guilds[str(ctx.guild.id)]):
             if server['address'] == address:
                 try:
@@ -179,7 +176,9 @@ async def rem(ctx, address):
                 guilds[str(ctx.guild.id)].pop(c)
                 await ctx.send('Removed {}\'s status from this guild'.format(address))
                 dbUpdate = True
-                break
+                lock.release(ctx.guild.id)
+                return
+    await ctx.send('This server does not exist')
     lock.release(ctx.guild.id)
 @rem.error
 async def rem_error(ctx, error):
@@ -206,7 +205,8 @@ async def ping():
     while True:
         for guild in guilds:
             for server in guilds[guild]:
-                if servers[server['address']]['time'] is None or dt.now() - servers[server['address']]['time'] >= td(minutes=config['pingInterval']):
+                if server['address'] in servers.keys() and (servers[server['address']]['time'] is None \
+                    or dt.now() - servers[server['address']]['time'] >= td(minutes=config['pingInterval'])):
                     servers[server['address']]['time'] = dt.now()
                     try: servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
                     except Exception: servers[server['address']]['reply'] = 'offline'
@@ -216,23 +216,25 @@ async def ping():
 async def update():
     while True:
         for guild in guilds:
+            writeCache = False
             for server in guilds[guild]:
                 if servers[server['address']]['reply'] is None: continue
                 try:
-                    if lastUpdate[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
+                    if cache.update[guild][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != lastUpdate[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
-                            lastUpdate[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
-                            lastUpdate[guild][server['address']]['status'] = status
+                        if status != cache.update[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
+                            cache.update[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
+                            cache.update[guild][server['address']]['status'] = status
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
+                            writeCache = True
 
-                    if config['showPlayers'] and server['message'] is not None and (lastUpdate[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(lastUpdate[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
+                    if config['showPlayers'] and server['message'] is not None and (cache.update[guild][server['address']]['playersTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
@@ -240,14 +242,18 @@ async def update():
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
-                        if players != lastUpdate[guild][server['address']]['players'] \
+                        if players != cache.update[guild][server['address']]['players'] \
                             and bot.get_channel(id=server['playersChannel']) is not None \
                             and bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
-                            lastUpdate[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
-                            lastUpdate[guild][server['address']]['players'] = players
+                            cache.update[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
+                            cache.update[guild][server['address']]['players'] = players
                             await bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
+                            writeCache = True
                 except Exception as e: print(e)
                 await asyncio.sleep(0)
+            if writeCache:
+                with open('./cache/update/'+guild, 'w') as file:
+                    file.write(json.dumps(cache.update[guild]))
         await asyncio.sleep(1)
 
 async def crash_handler():
@@ -255,13 +261,13 @@ async def crash_handler():
         await asyncio.sleep(10)
         if updateTask.done():
             loop.create_task(update())
-            print('Restarted update task')
+            print('--Restarted task: update')
         if pingTask.done():
             loop.create_task(ping())
-            print('Restarted ping task')
+            print('--Restarted task: ping')
         if dbUpdaterTask.done():
             loop.create_task(db_updater())
-            print('Restarted db_updater task')
+            print('--Restarted task: db_updater')
 
 async def login():
     try:
