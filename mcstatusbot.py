@@ -11,11 +11,6 @@ from utils.cache import cache as c
 
 bot = commands.Bot('$')
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'addressesPerGuild': 2, 'showPlayers': True}
-guilds = {}
-servers = {}
-dbUpdate = True
-lock = kl()
-cache = c()
 
 async def db_updater():
     global dbUpdate
@@ -27,14 +22,23 @@ async def db_updater():
             dbUpdate = False
         await asyncio.sleep(10)
 
-
 async def init():
     global config
     global guilds
+    global servers
     global pingTask
     global updateTask
     global dbUpdaterTask
+    global dbUpdate
+    global lock
+    global cache
     
+    guilds = {}
+    servers = {}
+    dbUpdate = True
+    lock = kl()
+    cache = c()
+
     if os.path.exists('config.json'):
         with open('config.json', 'r') as file:
             config = json.loads(file.read())
@@ -218,7 +222,7 @@ async def update():
         for guild in guilds:
             writeCache = False
             for server in guilds[guild]:
-                if servers[server['address']]['reply'] is None: continue
+                if server['address'] not in servers.keys() or servers[server['address']]['reply'] is None: continue
                 try:
                     if cache.update[guild][server['address']]['statusTime'] is None \
                         or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
@@ -257,16 +261,26 @@ async def update():
         await asyncio.sleep(1)
 
 async def crash_handler():
+    global pingTask
+    global updateTask
+    global dbUpdaterTask
+
     while True:
         await asyncio.sleep(10)
         if updateTask.done():
-            loop.create_task(update())
+            lock.reset()
+            cache.reset()
+            updateTask = loop.create_task(update())
             print('--Restarted task: update')
         if pingTask.done():
-            loop.create_task(ping())
+            lock.reset()
+            cache.reset()
+            pingTask = loop.create_task(ping())
             print('--Restarted task: ping')
         if dbUpdaterTask.done():
-            loop.create_task(db_updater())
+            lock.reset()
+            cache.reset()
+            dbUpdaterTask = loop.create_task(db_updater())
             print('--Restarted task: db_updater')
 
 async def login():
