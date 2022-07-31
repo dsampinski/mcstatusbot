@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import asyncio
-import mcstatus
 from mcstatus.server import JavaServer as js
 import os
 import json
@@ -52,17 +51,13 @@ async def init():
         with open('db.json', 'r') as file:
             guilds = json.loads(file.read())
         
-        if len(guilds.keys()):
-            for guild in guilds:
-                if os.path.exists('./cache/update/'+guild):
-                    with open('./cache/update/'+guild, 'r') as file:
-                        cache.update[guild] = json.loads(file.read())
-                else: cache.update[guild] = {}
-                for server in guilds[guild]:
-                    if server['address'] not in servers.keys():
-                        try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
-                        except Exception as e: print(e)
-                    if server['address'] not in cache.update[guild].keys(): cache.update[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+        for guild in guilds:
+            for server in guilds[guild]:
+                if server['address'] not in servers.keys():
+                    try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
+                    except Exception as e: print(e)
+        
+        cache.buildUpdate(guilds)
     
     pingTask = loop.create_task(ping())
     updateTask = loop.create_task(update())
@@ -270,16 +265,19 @@ async def crash_handler():
         if updateTask.done():
             lock.reset()
             cache.reset()
+            cache.buildUpdate(guilds)
             updateTask = loop.create_task(update())
             print('--Restarted task: update')
         if pingTask.done():
             lock.reset()
             cache.reset()
+            cache.buildUpdate(guilds)
             pingTask = loop.create_task(ping())
             print('--Restarted task: ping')
         if dbUpdaterTask.done():
             lock.reset()
             cache.reset()
+            cache.buildUpdate(guilds)
             dbUpdaterTask = loop.create_task(db_updater())
             print('--Restarted task: db_updater')
 
