@@ -1,3 +1,4 @@
+from re import M
 import discord
 from discord.ext import commands
 import asyncio
@@ -11,29 +12,18 @@ from utils.cache import cache as c
 bot = commands.Bot('$')
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'addressesPerGuild': 2, 'showPlayers': True}
 
-async def db_updater():
-    global dbUpdate
-
-    while True:
-        if dbUpdate:
-            with open('db.json', 'w') as file:
-                file.write(json.dumps(guilds))
-            dbUpdate = False
-        await asyncio.sleep(10)
-
 async def init():
     global config
     global guilds
     global servers
-    global pingTask
-    global updateTask
-    global dbUpdaterTask
+    global tasks
     global dbUpdate
     global lock
     global cache
     
     guilds = {}
     servers = {}
+    tasks = {}
     dbUpdate = True
     lock = kl()
     cache = c()
@@ -59,21 +49,19 @@ async def init():
         
         cache.buildUpdate(guilds)
     
-    pingTask = loop.create_task(ping())
-    updateTask = loop.create_task(update())
-    dbUpdaterTask = loop.create_task(db_updater())
-    loop.create_task(crash_handler())
+    tasks[ping] = loop.create_task(ping())
+    tasks[update] = loop.create_task(update())
+    tasks[db_updater] = loop.create_task(db_updater())
+    loop.create_task(crash_handler(tasks))
 
 @bot.event
 async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('--Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@bot.command(help='Ping the bot for its status', brief='Ping')
+@bot.command(help='Ping the bot', brief='Ping')
 async def ping(ctx):
-    if not (pingTask.done() or updateTask.done() or dbUpdaterTask.done()):
-        await ctx.send('MC Status Bot is running')
-    else: await ctx.send('An error has occured in MC Status Bot (task(s) not running)')
+    await ctx.send('Pong')
 
 @bot.command(hidden=True, help='Reload the bot\'s config file', brief='Reload config')
 async def reload(ctx):
@@ -255,31 +243,26 @@ async def update():
                     file.write(json.dumps(cache.update[guild]))
         await asyncio.sleep(1)
 
-async def crash_handler():
-    global pingTask
-    global updateTask
-    global dbUpdaterTask
+async def db_updater():
+    global dbUpdate
 
     while True:
+        if dbUpdate:
+            with open('db.json', 'w') as file:
+                file.write(json.dumps(guilds))
+            dbUpdate = False
         await asyncio.sleep(10)
-        if updateTask.done():
-            lock.reset()
-            cache.reset()
-            cache.buildUpdate(guilds)
-            updateTask = loop.create_task(update())
-            print('--Restarted task: update')
-        if pingTask.done():
-            lock.reset()
-            cache.reset()
-            cache.buildUpdate(guilds)
-            pingTask = loop.create_task(ping())
-            print('--Restarted task: ping')
-        if dbUpdaterTask.done():
-            lock.reset()
-            cache.reset()
-            cache.buildUpdate(guilds)
-            dbUpdaterTask = loop.create_task(db_updater())
-            print('--Restarted task: db_updater')
+
+async def crash_handler(tasks):
+    while True:
+        await asyncio.sleep(10)
+        for method, task in tasks.items():
+            if task.done():
+                lock.reset()
+                cache.reset()
+                cache.buildUpdate(guilds)
+                tasks[method] = loop.create_task(method())
+                print('--Restarted task: {}'.format(method.__name__))
 
 async def login():
     try:

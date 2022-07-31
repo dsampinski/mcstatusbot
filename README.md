@@ -40,7 +40,7 @@ Whether to show the players list or not
 ## Everyone
 > $ping
 
-Ping the bot for its status
+Ping the bot
 
 > $help
 
