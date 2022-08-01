@@ -59,12 +59,14 @@ async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('--Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@bot.command(help='Ping the bot', brief='Ping')
-async def ping(ctx):
+@bot.command(name='ping', help='Ping the bot', brief='Ping')
+async def com_ping(ctx):
+    for task in tasks.values():
+        if task.done(): return
     await ctx.send('Pong')
 
-@bot.command(hidden=True, help='Reload the bot\'s config file', brief='Reload config')
-async def reload(ctx):
+@bot.command(name='reload', hidden=True, help='Reload the bot\'s config file', brief='Reload config')
+async def com_reload(ctx):
     global config
 
     if str(ctx.author.id) != config['adminId']:
@@ -77,8 +79,8 @@ async def reload(ctx):
             file.write(json.dumps(config))
     await ctx.send('Reloaded config')
 
-@bot.command(hidden=True, help='Shutdown the bot', brief='Shutdown bot')
-async def shutdown(ctx):
+@bot.command(name='shutdown', hidden=True, help='Shutdown the bot', brief='Shutdown bot')
+async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     await ctx.send('Shutting down...')
@@ -86,8 +88,8 @@ async def shutdown(ctx):
     with open('db.json', 'w') as file:
         file.write(json.dumps(guilds))
 
-@bot.command(help='Add a server\'s status to the guild', brief='Add server')
-async def add(ctx, address, name):
+@bot.command(name='add', help='Add a server\'s status to the guild', brief='Add server')
+async def com_add(ctx, address, name):
     global dbUpdate
 
     if not isinstance(ctx.author, discord.member.Member):
@@ -132,13 +134,13 @@ async def add(ctx, address, name):
             await ctx.send('Added {}\'s status to this guild'.format(address))
             dbUpdate = True
     finally: lock.release(ctx.guild.id)
-@add.error
-async def add_error(ctx, error):
+@com_add.error
+async def com_add_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$add <address> <name>')
 
-@bot.command(help='Remove a server\'s status from the guild', brief='Remove server')
-async def rem(ctx, address):
+@bot.command(name='rem', help='Remove a server\'s status from the guild', brief='Remove server')
+async def com_rem(ctx, address):
     global dbUpdate
 
     if not isinstance(ctx.author, discord.member.Member):
@@ -167,13 +169,13 @@ async def rem(ctx, address):
                 return
     await ctx.send('This server does not exist')
     lock.release(ctx.guild.id)
-@rem.error
-async def rem_error(ctx, error):
+@com_rem.error
+async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$rem <address>')
 
-@bot.command(help='List all servers in the guild', brief='List servers')
-async def list(ctx):
+@bot.command(name='list', help='List all servers in the guild', brief='List servers')
+async def com_list(ctx):
     if not isinstance(ctx.author, discord.member.Member):
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
