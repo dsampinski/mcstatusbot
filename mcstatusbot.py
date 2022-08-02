@@ -35,12 +35,7 @@ async def init():
         with open('config.json', 'w') as file:
             file.write(json.dumps(config))
     
-    try:
-        await bot.start(config['token'])
-    except Exception as e:
-        print(e)
-        await bot.close()
-        loop.stop()
+    loop.create_task(bot_login(config['token']))
 
     if os.path.exists('db.json'):
         with open('db.json', 'r') as file:
@@ -56,7 +51,7 @@ async def init():
 
     tasks[ping] = loop.create_task(ping())
     tasks[update] = loop.create_task(update())
-    tasks[db_updater] = loop.create_task(db_updater())
+    tasks[db_updater] = loop.create_task(db_updater('db.json'))
     loop.create_task(crash_handler(tasks))
 
 @bot.event
@@ -89,6 +84,7 @@ async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     await ctx.send('Shutting down...')
+    while lock.keys.keys(): await asyncio.sleep(0)
     await bot.close()
     loop.stop()
     with open('db.json', 'w') as file:
@@ -124,13 +120,11 @@ async def com_add(ctx, address, name):
     else:
         try:
             newCat = await ctx.guild.create_category(name)
-            statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
-            await statChan.set_permissions(bot.user, connect=True)
-            await statChan.set_permissions(ctx.guild.default_role, connect=False)
+            await newCat.set_permissions(bot.user, send_messages=True, connect=True)
+            await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
+            statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat, sync=True)
             if config['showPlayers']:
-                playChan = await ctx.guild.create_text_channel('players', category=newCat)
-                await playChan.set_permissions(bot.user, send_messages=True)
-                await playChan.set_permissions(ctx.guild.default_role, send_messages=False)
+                playChan = await ctx.guild.create_text_channel('players', category=newCat, sync=True)
                 msg = await bot.get_channel(id=playChan.id).send('Pinging...')
         except Exception as e: await ctx.send('Error: ' + str(e))
         else:
@@ -198,14 +192,11 @@ async def com_list(ctx):
 
 async def ping():
     while True:
-        for guild in guilds:
-            for server in guilds[guild]:
-                if server['address'] in servers.keys() and (servers[server['address']]['time'] is None \
-                    or dt.now() - servers[server['address']]['time'] >= td(minutes=config['pingInterval'])):
-                    servers[server['address']]['time'] = dt.now()
-                    try: servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
-                    except Exception: servers[server['address']]['reply'] = 'offline'
-                await asyncio.sleep(0)
+        for server in servers.values():
+            if server['time'] is None or dt.now() - server['time'] >= td(minutes=config['pingInterval']):
+                server['time'] = dt.now()
+                try: server['reply'] = await server['lookup'].async_status()
+                except Exception: server['reply'] = 'offline'
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 
@@ -253,12 +244,12 @@ async def update():
                     file.write(json.dumps(cache.update[guild]))
         await asyncio.sleep(1)
 
-async def db_updater():
+async def db_updater(fileName):
     global dbUpdate
 
     while True:
         if dbUpdate:
-            with open('db.json', 'w') as file:
+            with open(fileName, 'w') as file:
                 file.write(json.dumps(guilds))
             dbUpdate = False
         await asyncio.sleep(10)
@@ -273,6 +264,14 @@ async def crash_handler(tasks):
                 cache.buildUpdate(guilds)
                 tasks[method] = loop.create_task(method())
                 print('--Restarted task: {}'.format(method.__name__))
+
+async def bot_login(token):
+    try:
+        await bot.start(token)
+    except Exception as e:
+        print(e)
+        await bot.close()
+        loop.stop()
     
 loop = asyncio.get_event_loop()
 loop.create_task(init())
