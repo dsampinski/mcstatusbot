@@ -84,7 +84,6 @@ async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     await ctx.send('Shutting down...')
-    while lock.keys.keys(): await asyncio.sleep(0)
     await bot.close()
     loop.stop()
     with open('db.json', 'w') as file:
