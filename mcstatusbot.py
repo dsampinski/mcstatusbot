@@ -84,6 +84,7 @@ async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     await ctx.send('Shutting down...')
+    await bot.close()
     loop.stop()
     with open('db.json', 'w') as file:
         file.write(json.dumps(guilds))
@@ -200,6 +201,7 @@ async def ping():
                     try: servers[server['address']]['reply'] = await servers[server['address']]['lookup'].async_status()
                     except Exception: servers[server['address']]['reply'] = 'offline'
                 await asyncio.sleep(0)
+            await asyncio.sleep(0)
         await asyncio.sleep(1)
 
 async def update():
@@ -222,7 +224,7 @@ async def update():
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
                             writeCache = True
 
-                    if config['showPlayers'] and server['message'] is not None and (cache.update[guild][server['address']]['playersTime'] is None \
+                    if config['showPlayers'] and (cache.update[guild][server['address']]['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
@@ -240,6 +242,7 @@ async def update():
                             writeCache = True
                 except Exception as e: print(e)
                 await asyncio.sleep(0)
+            await asyncio.sleep(0)
             if writeCache:
                 with open('./cache/update/'+guild, 'w') as file:
                     file.write(json.dumps(cache.update[guild]))
@@ -271,6 +274,7 @@ async def login():
         await bot.start(config['token'])
     except Exception as e:
         print(e)
+        await bot.close()
         loop.stop()
     
 loop = asyncio.get_event_loop()
