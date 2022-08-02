@@ -47,7 +47,7 @@ async def init():
                     try: servers[server['address']] = {'lookup': await js.async_lookup(server['address']), 'time': None, 'reply': None}
                     except Exception as e: print(e)
         
-        cache.buildUpdate(guilds)
+        cache.Updates.build(guilds)
 
     tasks[ping] = loop.create_task(ping())
     tasks[update] = loop.create_task(update())
@@ -84,6 +84,7 @@ async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     await ctx.send('Shutting down...')
+    await lock.lock()
     await bot.close()
     loop.stop()
     with open('db.json', 'w') as file:
@@ -128,8 +129,7 @@ async def com_add(ctx, address, name):
         except Exception as e: await ctx.send('Error: ' + str(e))
         else:
             guilds[str(ctx.guild.id)].append({'address': address, 'category': newCat.id, 'statusChannel': statChan.id, 'playersChannel': (playChan.id if config['showPlayers'] else None), 'message': (msg.id if config['showPlayers'] else None)})
-            if str(ctx.guild.id) not in cache.update.keys(): cache.update[str(ctx.guild.id)] = {}
-            if address not in cache.update[str(ctx.guild.id)].keys(): cache.update[str(ctx.guild.id)][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+            cache.Updates.add(str(ctx.guild.id), address)
             await ctx.send('Added {}\'s status to this guild'.format(address))
             dbUpdate = True
     finally: lock.release(ctx.guild.id)
@@ -206,21 +206,21 @@ async def update():
             for server in guilds[guild]:
                 if server['address'] not in servers.keys() or servers[server['address']]['reply'] is None: continue
                 try:
-                    if cache.update[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
+                    if cache.updates[guild][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.updates[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != cache.update[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
-                            cache.update[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
-                            cache.update[guild][server['address']]['status'] = status
+                        if status != cache.updates[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
+                            cache.updates[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
+                            cache.updates[guild][server['address']]['status'] = status
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
                             writeCache = True
 
-                    if config['showPlayers'] and (cache.update[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.update[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
+                    if config['showPlayers'] and (cache.updates[guild][server['address']]['playersTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.updates[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
@@ -228,19 +228,17 @@ async def update():
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
-                        if players != cache.update[guild][server['address']]['players'] \
+                        if players != cache.updates[guild][server['address']]['players'] \
                             and bot.get_channel(id=server['playersChannel']) is not None \
                             and bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
-                            cache.update[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
-                            cache.update[guild][server['address']]['players'] = players
+                            cache.updates[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
+                            cache.updates[guild][server['address']]['players'] = players
                             await bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                             writeCache = True
                 except Exception as e: print(e)
                 await asyncio.sleep(0)
             await asyncio.sleep(0)
-            if writeCache:
-                with open('./cache/update/'+guild, 'w') as file:
-                    file.write(json.dumps(cache.update[guild]))
+            if writeCache: cache.Updates.write(guild)
         await asyncio.sleep(1)
 
 async def db_updater(fileName):
@@ -260,7 +258,7 @@ async def crash_handler(tasks):
             if task.done():
                 lock.reset()
                 cache.reset()
-                cache.buildUpdate(guilds)
+                cache.Updates.build(guilds)
                 tasks[method] = loop.create_task(method())
                 print('--Restarted task: {}'.format(method.__name__))
 
@@ -272,6 +270,6 @@ async def bot_login(token):
         await bot.close()
         loop.stop()
     
-loop = asyncio.get_event_loop()
+loop = bot.loop
 loop.create_task(init())
 loop.run_forever()
