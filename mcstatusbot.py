@@ -34,8 +34,13 @@ async def init():
     else:
         with open('config.json', 'w') as file:
             file.write(json.dumps(config))
-
-    loop.create_task(login())
+    
+    try:
+        await bot.start(config['token'])
+    except Exception as e:
+        print(e)
+        await bot.close()
+        loop.stop()
 
     if os.path.exists('db.json'):
         with open('db.json', 'r') as file:
@@ -48,7 +53,7 @@ async def init():
                     except Exception as e: print(e)
         
         cache.buildUpdate(guilds)
-    
+
     tasks[ping] = loop.create_task(ping())
     tasks[update] = loop.create_task(update())
     tasks[db_updater] = loop.create_task(db_updater())
@@ -57,7 +62,7 @@ async def init():
 @bot.event
 async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
-    print('--Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
+    print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
 @bot.command(name='ping', help='Ping the bot', brief='Ping')
 async def com_ping(ctx):
@@ -268,14 +273,6 @@ async def crash_handler(tasks):
                 cache.buildUpdate(guilds)
                 tasks[method] = loop.create_task(method())
                 print('--Restarted task: {}'.format(method.__name__))
-
-async def login():
-    try:
-        await bot.start(config['token'])
-    except Exception as e:
-        print(e)
-        await bot.close()
-        loop.stop()
     
 loop = asyncio.get_event_loop()
 loop.create_task(init())
