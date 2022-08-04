@@ -1,8 +1,7 @@
-from re import M
 import discord
 from discord.ext import commands
-import asyncio
 from mcstatus.server import JavaServer as js
+import asyncio
 import os
 import json
 from datetime import datetime as dt, timedelta as td
@@ -24,7 +23,7 @@ async def init():
     guilds = {}
     servers = {}
     tasks = {}
-    dbUpdate = True
+    dbUpdate = False
     lock = kl()
     cache = c()
 
@@ -206,21 +205,21 @@ async def update():
             for server in guilds[guild]:
                 if server['address'] not in servers.keys() or servers[server['address']]['reply'] is None: continue
                 try:
-                    if cache.updates[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.updates[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
+                    if cache.Updates.updates[guild][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != cache.updates[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
-                            cache.updates[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
-                            cache.updates[guild][server['address']]['status'] = status
+                        if status != cache.Updates.updates[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
+                            cache.Updates.updates[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
+                            cache.Updates.updates[guild][server['address']]['status'] = status
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
                             writeCache = True
 
-                    if config['showPlayers'] and (cache.updates[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.updates[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
+                    if config['showPlayers'] and (cache.Updates.updates[guild][server['address']]['playersTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
@@ -228,11 +227,11 @@ async def update():
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
-                        if players != cache.updates[guild][server['address']]['players'] \
+                        if players != cache.Updates.updates[guild][server['address']]['players'] \
                             and bot.get_channel(id=server['playersChannel']) is not None \
                             and bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
-                            cache.updates[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
-                            cache.updates[guild][server['address']]['players'] = players
+                            cache.Updates.updates[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
+                            cache.Updates.updates[guild][server['address']]['players'] = players
                             await bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                             writeCache = True
                 except Exception as e: print(e)
