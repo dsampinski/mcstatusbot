@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
-import asyncio
 from mcstatus.server import JavaServer as js
+import asyncio
 import os
 import json
 from datetime import datetime as dt, timedelta as td
@@ -23,7 +23,7 @@ async def init():
     guilds = {}
     servers = {}
     tasks = {}
-    dbUpdate = True
+    dbUpdate = False
     lock = kl()
     cache = c()
 
