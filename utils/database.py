@@ -69,12 +69,12 @@ class database:
         self.db.commit()
         self.db.close()
     
-def migrateFromJson(json_db):
+def migrateFromJson(json_db, sqlite_db):
     if os.path.exists(json_db):
         with open(json_db) as file:
             guildServers = json.loads(file.read())
         print('Migrating...')
-        db = database()
+        db = database(sqlite_db)
         for guild in guildServers:
             db.addGuild(guild, None)
             for server in guildServers[guild]:
