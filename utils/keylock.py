@@ -12,6 +12,6 @@ class keylock:
         if key in self.keys.keys(): self.keys.pop(key)
     def reset(self):
         self.keys = {}
-    async def lock(self):
+    async def close(self):
         self._lock = True
         while self.keys.keys(): await asyncio.sleep(0)
