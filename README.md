@@ -46,6 +46,10 @@ Ping the bot
 
 Shows help
 
+> $info
+
+Shows info about the bot
+
 ## Users with permission to manage channels
 > $add *address name*
 
@@ -57,7 +61,7 @@ Remove a server's status from the guild
 
 > $list
 
-List all servers in the guild
+Lists all servers in the guild
 
 ## Bot admin
 > $admin reload

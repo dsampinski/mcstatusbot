@@ -57,11 +57,16 @@ async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@bot.command(name='ping', help='Ping the bot', brief='Ping')
+@bot.command(name='ping', help='Ping the bot', brief='Ping the bot')
 async def com_ping(ctx):
     for task in tasks.values():
         if task.done(): return
     await ctx.send('Pong')
+
+@bot.command(name='info', help='Shows info about the bot', brief='Shows bot info')
+async def com_info(ctx):
+    await ctx.send('MC Status Bot by GitHub@dsampinski to display Minecraft servers\' statuses\n\
+                    https://github.com/dsampinski/mcstatusbot')
 
 @bot.group(name='admin', hidden=True)
 async def grp_admin(ctx): pass
@@ -180,7 +185,7 @@ async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$rem <address>')
 
-@bot.command(name='list', help='List all servers in the guild', brief='List servers')
+@bot.command(name='list', help='Lists all servers in the guild', brief='Lists servers')
 async def com_list(ctx):
     if not isinstance(ctx.author, discord.member.Member):
         return
@@ -190,9 +195,8 @@ async def com_list(ctx):
     
     await lock.acquire(ctx.guild.id)
     addresses = 'Addresses added to this guild:\n'
-    if ctx.guild.id in guild_ids:
-        for server in db.getGuildServers(ctx.guild.id):
-            addresses += server['address'] + '\n'
+    for server in db.getGuildServers(ctx.guild.id):
+        addresses += server['address'] + '\n'
     await ctx.send(addresses)
     lock.release(ctx.guild.id)
 

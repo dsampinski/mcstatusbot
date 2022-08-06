@@ -2,6 +2,7 @@ database.db
 db.json
 config.json
 cache/
+db-export/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
