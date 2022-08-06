@@ -60,12 +60,16 @@ Remove a server's status from the guild
 List all servers in the guild
 
 ## Bot admin
-> $reload
+> $admin reload
 
 Reload the bot's config file
 
-> $shutdown
+> $admin shutdown
 
 Shutdown the bot
+
+> $admin export
+
+Export the database as JSON to filesystem
 
 **The bot must have permission to manage channels and roles*

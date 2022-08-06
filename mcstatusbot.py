@@ -30,7 +30,7 @@ async def init():
             config = json.loads(file.read())
     else:
         with open('config.json', 'w') as file:
-            file.write(json.dumps(config))
+            file.write(json.dumps(config, indent=4))
     
     if not bot.is_ready():
         loop.create_task(bot_login(config['token']))
@@ -63,24 +63,41 @@ async def com_ping(ctx):
         if task.done(): return
     await ctx.send('Pong')
 
-@bot.command(name='reload', hidden=True, help='Reload the bot\'s config file', brief='Reload config')
-async def com_reload(ctx):
-    global config
+@bot.group(name='admin', hidden=True)
+async def grp_admin(ctx): pass
 
+@grp_admin.command(name='export', help='Export the database as JSON to filesystem')
+async def com_export(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
+    
+    if not os.path.exists('./db-export/'):
+        os.mkdir('./db-export/')
+    with open('./db-export/guilds.json', 'w') as file:
+        file.write(json.dumps(db.getGuilds(), indent=4))
+    with open('./db-export/guildServers.json', 'w') as file:
+        file.write(json.dumps(db.getGuildServers(), indent=4))
+    await ctx.send('Exported database')
+
+@grp_admin.command(name='reload', help='Reload the bot\'s config file')
+async def com_reload(ctx):
+    global config
+    if str(ctx.author.id) != config['adminId']:
+        return
+    
     if os.path.exists('config.json'):
         with open('config.json', 'r') as file:
             config = json.loads(file.read())
     else:
         with open('config.json', 'w') as file:
-            file.write(json.dumps(config))
+            file.write(json.dumps(config, indent=4))
     await ctx.send('Reloaded config')
 
-@bot.command(name='shutdown', hidden=True, help='Shutdown the bot', brief='Shutdown bot')
+@grp_admin.command(name='shutdown', help='Shutdown the bot')
 async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
+    
     await ctx.send('Shutting down...')
     await lock.close()
     await bot.close()
@@ -94,7 +111,7 @@ async def com_add(ctx, address, name):
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         await ctx.send('Not enough permissions')
         return
-
+    
     await lock.acquire(ctx.guild.id)
     if ctx.guild.id in guild_ids:
         if db.guildHasServer(ctx.guild.id, address):
@@ -108,7 +125,6 @@ async def com_add(ctx, address, name):
     else:
         db.addGuild(ctx.guild.id, ctx.guild.name)
         guild_ids.append(address)
-
     try:
         if address not in servers.keys():
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
@@ -140,7 +156,7 @@ async def com_rem(ctx, address):
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         await ctx.send('Not enough permissions')
         return
-
+    
     await lock.acquire(ctx.guild.id)
     if db.guildHasServer(ctx.guild.id, address):
         try:
@@ -152,7 +168,7 @@ async def com_rem(ctx, address):
             if bot.get_channel(id=server['category']) is not None:
                 await bot.get_channel(id=server['category']).delete()
         except Exception as e: await ctx.send('Error: ' + str(e))
-        
+
         db.removeServer(ctx.guild.id, address)
         await ctx.send('Removed {}\'s status from this guild'.format(address))
         lock.release(ctx.guild.id)
@@ -171,7 +187,7 @@ async def com_list(ctx):
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         await ctx.send('Not enough permissions')
         return
-
+    
     await lock.acquire(ctx.guild.id)
     addresses = 'Addresses added to this guild:\n'
     if ctx.guild.id in guild_ids:
@@ -209,7 +225,7 @@ async def update():
                             cache.Updates.updates[guild][server['address']]['status'] = status
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
                             writeCache = True
-
+                    
                     if config['showPlayers'] and (cache.Updates.updates[guild][server['address']]['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
