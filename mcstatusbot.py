@@ -56,6 +56,7 @@ async def init():
 async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
+    await bot.change_presence(activity=discord.Activity(name='$help', type=discord.ActivityType.listening))
 
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):

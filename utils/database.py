@@ -24,12 +24,12 @@ class database:
         addresses = [entity[0] for entity in query]
         return guild_ids, addresses
     
-    def getGuilds(self, guild_id=None):
-        if guild_id is None:
+    def getGuilds(self, id=None):
+        if id is None:
             query = self.db.execute('SELECT * FROM guilds ORDER BY guild_id').fetchall()
             return [dict(zip(self._guild_attr, entity)) for entity in query]
         else:
-            query = self.db.execute('SELECT * FROM guilds WHERE guild_id = :guild_id', {'guild_id': guild_id}).fetchone()
+            query = self.db.execute('SELECT * FROM guilds WHERE guild_id = :id', {'id': id}).fetchone()
             return dict(zip(self._guild_attr, query))
 
     def getGuildServers(self, guild_id=None, address=None):
@@ -52,8 +52,8 @@ class database:
     def guildHasServer(self, guild_id, address):
         return self.db.execute('SELECT 1 FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address}).fetchone() is not None
     
-    def addGuild(self, guild_id, name):
-        self.db.execute('INSERT INTO guilds(guild_id, guild_name) VALUES(:guild_id, :name)', {'guild_id': guild_id, 'name': name})
+    def addGuild(self, id, name):
+        self.db.execute('INSERT INTO guilds(guild_id, guild_name) VALUES(:id, :name)', {'id': id, 'name': name})
         self.db.commit()
 
     def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):
@@ -76,9 +76,9 @@ def migrateFromJson(json_db='db.json', sqlite_db='database.db'):
         print('Migrating...')
         db = database(sqlite_db)
         for guild in guildServers:
-            db.addGuild(guild, None)
+            db.addGuild(int(guild), None)
             for server in guildServers[guild]:
-                db.addServer(guild, server['address'], server['category'], server['statusChannel'], server['playersChannel'], server['message'])
+                db.addServer(int(guild), server['address'], server['category'], server['statusChannel'], server['playersChannel'], server['message'])
         db.close()
         print('Done')
     else: print('File does not exist')
