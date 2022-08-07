@@ -185,7 +185,7 @@ async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$rem <address>')
 
-@bot.command(name='list', help='Lists all servers in the guild', brief='Lists servers')
+@bot.command(name='list', help='List all servers in the guild', brief='List servers')
 async def com_list(ctx):
     if not isinstance(ctx.author, discord.member.Member):
         return

@@ -61,7 +61,7 @@ Remove a server's status from the guild
 
 > $list
 
-Lists all servers in the guild
+List all servers in the guild
 
 ## Bot admin
 > $admin reload
