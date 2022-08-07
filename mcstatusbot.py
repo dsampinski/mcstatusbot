@@ -57,7 +57,7 @@ async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
 
-@bot.command(name='ping', help='Ping the bot', brief='Ping the bot')
+@bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
     for task in tasks.values():
         if task.done(): return
