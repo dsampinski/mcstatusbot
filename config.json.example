@@ -1,1 +1,8 @@
-{"token": "<DISCORD BOT TOKEN>", "adminId": "<DISCORD ID OF ADMIN>", "pingInterval": 1, "updateInterval": 1, "addressesPerGuild": 2, "showPlayers": true}
+{
+    "token": "<DISCORD BOT TOKEN>",
+    "adminId": "<DISCORD ID OF ADMIN>",
+    "pingInterval": 1,
+    "updateInterval": 1,
+    "addressesPerGuild": 2,
+    "showPlayers": true
+}

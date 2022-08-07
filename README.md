@@ -40,32 +40,40 @@ Whether to show the players list or not
 ## Everyone
 > $ping
 
-Ping the bot
+Pings the bot
 
 > $help
 
 Shows help
 
+> $info
+
+Shows info about the bot
+
 ## Users with permission to manage channels
 > $add *address name*
 
-Add a server's status to the guild
+Adds a server's status to the guild
 
 > $rem *address*
 
-Remove a server's status from the guild
+Removes a server's status from the guild
 
 > $list
 
-List all servers in the guild
+Lists all servers in the guild
 
 ## Bot admin
-> $reload
+> $admin reload
 
-Reload the bot's config file
+Reloads the bot's config file
 
-> $shutdown
+> $admin shutdown
 
-Shutdown the bot
+Shuts down the bot
+
+> $admin export
+
+Exports the database as JSON to filesystem
 
 **The bot must have permission to manage channels and roles*
