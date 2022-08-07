@@ -46,7 +46,7 @@ async def init():
         except Exception as e: print(e)
     print('  Initializing cache')
     cache.Updates.build(db.getGuildServers())
-    print('  Ready')
+    print('  Ready\n')
     
     tasks[ping] = loop.create_task(ping())
     tasks[update] = loop.create_task(update())
@@ -71,7 +71,7 @@ async def com_info(ctx):
 @bot.group(name='admin', hidden=True)
 async def grp_admin(ctx): pass
 
-@grp_admin.command(name='export', help='Export the database as JSON to filesystem')
+@grp_admin.command(name='export', help='Exports the database as JSON to filesystem')
 async def com_export(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
@@ -84,7 +84,7 @@ async def com_export(ctx):
         file.write(json.dumps(db.getGuildServers(), indent=4))
     await ctx.send('Exported database')
 
-@grp_admin.command(name='reload', help='Reload the bot\'s config file')
+@grp_admin.command(name='reload', help='Reloads the bot\'s config file')
 async def com_reload(ctx):
     global config
     if str(ctx.author.id) != config['adminId']:
@@ -98,7 +98,7 @@ async def com_reload(ctx):
             file.write(json.dumps(config, indent=4))
     await ctx.send('Reloaded config')
 
-@grp_admin.command(name='shutdown', help='Shutdown the bot')
+@grp_admin.command(name='shutdown', help='Shuts down the bot')
 async def com_shutdown(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
@@ -109,7 +109,7 @@ async def com_shutdown(ctx):
     db.close()
     loop.stop()
 
-@bot.command(name='add', help='Add a server\'s status to the guild', brief='Add server')
+@bot.command(name='add', help='Adds a server\'s status to the guild', brief='Adds a server')
 async def com_add(ctx, address, name):
     if not isinstance(ctx.author, discord.member.Member):
         return
@@ -131,7 +131,7 @@ async def com_add(ctx, address, name):
         db.addGuild(ctx.guild.id, ctx.guild.name)
         guild_ids.append(address)
     try:
-        if address not in servers.keys():
+        if address not in servers:
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
     except Exception as e: await ctx.send('Error: ' + str(e))
     else:
@@ -154,7 +154,7 @@ async def com_add_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$add <address> <name>')
 
-@bot.command(name='rem', help='Remove a server\'s status from the guild', brief='Remove server')
+@bot.command(name='rem', help='Removes a server\'s status from the guild', brief='Removes a server')
 async def com_rem(ctx, address):
     if not isinstance(ctx.author, discord.member.Member):
         return
@@ -185,7 +185,7 @@ async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send('Invalid arguments\n$rem <address>')
 
-@bot.command(name='list', help='List all servers in the guild', brief='List servers')
+@bot.command(name='list', help='Lists all servers in the guild', brief='Lists servers')
 async def com_list(ctx):
     if not isinstance(ctx.author, discord.member.Member):
         return
@@ -215,7 +215,7 @@ async def update():
         for guild in guild_ids:
             writeCache = False
             for server in db.getGuildServers(guild):
-                if server['address'] not in servers.keys() or servers[server['address']]['reply'] is None: continue
+                if server['address'] not in servers or servers[server['address']]['reply'] is None: continue
                 try:
                     if cache.Updates.updates[guild][server['address']]['statusTime'] is None \
                         or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):

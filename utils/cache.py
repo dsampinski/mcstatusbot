@@ -29,11 +29,11 @@ class _Updates:
                     self.updates[guild] = json.loads(file.read())
             else: self.updates[guild] = {}
             for server in guildServers[guild]:
-                if server['address'] not in self.updates[guild].keys(): self.updates[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+                if server['address'] not in self.updates[guild]: self.updates[guild][server['address']] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
 
     def add(self, guild_id, address):
-        if guild_id not in self.updates.keys(): self.updates[guild_id] = {}
-        if address not in self.updates[guild_id].keys(): self.updates[guild_id][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+        if guild_id not in self.updates: self.updates[guild_id] = {}
+        if address not in self.updates[guild_id]: self.updates[guild_id][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
 
     def write(self, guild_id):
         with open(self._path + str(guild_id), 'w') as file:
