@@ -20,10 +20,6 @@ async def init():
     global tasks
     global lock
     global cache
-    
-    tasks = {}
-    lock = kl()
-    cache = c()
 
     if os.path.exists('config.json'):
         with open('config.json', 'r') as file:
@@ -33,30 +29,36 @@ async def init():
             file.write(json.dumps(config, indent=4))
     
     if not bot.is_ready():
+        lock = kl()
+        await lock.acquire('init')
         loop.create_task(bot_login(config['token']))
-        while not bot.is_ready(): await asyncio.sleep(0)
 
+    await lock.acquire('init')
     print('--Initializing database')
     db = database('database.db')
-    guild_ids, addresses = db.getInit()
+    guild_ids, srv_addresses = db.getKeys()
     print('  Initializing servers')
-    servers = dict.fromkeys(addresses)
-    for address in addresses:
+    servers = dict.fromkeys(srv_addresses)
+    for address in srv_addresses:
         try: servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
         except Exception as e: print(e)
     print('  Initializing cache')
+    cache = c()
     cache.Updates.build(db.getGuildServers())
-    print('  Ready\n')
-    
+    print('  Initializing tasks')
+    tasks = {}
     tasks[ping] = loop.create_task(ping())
     tasks[update] = loop.create_task(update())
     loop.create_task(crash_handler(tasks))
+    print('  Ready\n')
+    lock.release('init')
 
 @bot.event
 async def on_ready():
     print('--Logged in as {0.user}'.format(bot))
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
     await bot.change_presence(activity=discord.Activity(name='$help', type=discord.ActivityType.listening))
+    lock.release('init')
 
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
@@ -72,18 +74,20 @@ async def com_info(ctx):
 @bot.group(name='admin', hidden=True)
 async def grp_admin(ctx): pass
 
-@grp_admin.command(name='export', help='Exports the database as JSON to filesystem')
+@grp_admin.command(name='export', help='Exports the database and cache as JSON to the filesystem')
 async def com_export(ctx):
     if str(ctx.author.id) != config['adminId']:
         return
     
-    if not os.path.exists('./db-export/'):
-        os.mkdir('./db-export/')
-    with open('./db-export/guilds.json', 'w') as file:
+    if not os.path.exists('./export/'):
+        os.mkdir('./export/')
+    with open('./export/db.guilds.json', 'w') as file:
         file.write(json.dumps(db.getGuilds(), indent=4))
-    with open('./db-export/guildServers.json', 'w') as file:
+    with open('./export/db.guildServers.json', 'w') as file:
         file.write(json.dumps(db.getGuildServers(), indent=4))
-    await ctx.send('Exported database')
+    with open('./export/cache.updates.json', 'w') as file:
+        file.write(json.dumps(cache.Updates.updates, indent=4))
+    await ctx.send('Exported database and cache')
 
 @grp_admin.command(name='reload', help='Reloads the bot\'s config file')
 async def com_reload(ctx):
@@ -119,8 +123,8 @@ async def com_add(ctx, address, name):
         return
     
     await lock.acquire(ctx.guild.id)
-    if ctx.guild.id in guild_ids:
-        if db.guildHasServer(ctx.guild.id, address):
+    if db.getGuilds(ctx.guild.id) is not None:
+        if db.getGuildServers(ctx.guild.id, address) is not None:
             await ctx.send('Address is already added')
             lock.release(ctx.guild.id)
             return
@@ -130,7 +134,8 @@ async def com_add(ctx, address, name):
             return
     else:
         db.addGuild(ctx.guild.id, ctx.guild.name)
-        guild_ids.append(address)
+        guild_ids.append(ctx.guild.id)
+    
     try:
         if address not in servers:
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
@@ -164,7 +169,7 @@ async def com_rem(ctx, address):
         return
     
     await lock.acquire(ctx.guild.id)
-    if db.guildHasServer(ctx.guild.id, address):
+    if db.getGuildServers(ctx.guild.id, address) is not None:
         try:
             server = db.getGuildServers(ctx.guild.id, address)
             if bot.get_channel(id=server['statusChannel']) is not None:

@@ -33,7 +33,7 @@ class _Updates:
 
     def add(self, guild_id, address):
         if guild_id not in self.updates: self.updates[guild_id] = {}
-        if address not in self.updates[guild_id]: self.updates[guild_id][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
+        self.updates[guild_id][address] = {'statusTime': None, 'status': None, 'playersTime': None, 'players': None}
 
     def write(self, guild_id):
         with open(self._path + str(guild_id), 'w') as file:

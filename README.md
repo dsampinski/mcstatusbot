@@ -74,6 +74,6 @@ Shuts down the bot
 
 > $admin export
 
-Exports the database as JSON to filesystem
+Exports the database and cache as JSON to the filesystem
 
 **The bot must have permission to manage channels and roles*
