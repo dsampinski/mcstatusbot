@@ -15,7 +15,6 @@ config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'p
 async def init():
     global config
     global db
-    global guild_ids
     global servers
     global tasks
     global lock
@@ -36,8 +35,8 @@ async def init():
     await lock.acquire('init')
     print('--Initializing database')
     db = database('database.db')
-    guild_ids, srv_addresses = db.getKeys()
     print('  Initializing servers')
+    srv_addresses = db.getServers(addressOnly=True)
     servers = dict.fromkeys(srv_addresses)
     for address in srv_addresses:
         try: servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
@@ -81,8 +80,8 @@ async def com_export(ctx):
     
     if not os.path.exists('./export/'):
         os.mkdir('./export/')
-    with open('./export/db.guilds.json', 'w') as file:
-        file.write(json.dumps(db.getGuilds(), indent=4))
+    with open('./export/bot.guilds.json', 'w') as file:
+        file.write(json.dumps(dict((guild.id, str(guild)) for guild in bot.guilds), indent=4))
     with open('./export/db.guildServers.json', 'w') as file:
         file.write(json.dumps(db.getGuildServers(), indent=4))
     with open('./export/cache.updates.json', 'w') as file:
@@ -123,18 +122,14 @@ async def com_add(ctx, address, name):
         return
     
     await lock.acquire(ctx.guild.id)
-    if db.getGuilds(ctx.guild.id) is not None:
-        if db.getGuildServers(ctx.guild.id, address) is not None:
-            await ctx.send('Address is already added')
-            lock.release(ctx.guild.id)
-            return
-        if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['addressesPerGuild']:
-            await ctx.send('Reached maximum amount of addresses in this guild')
-            lock.release(ctx.guild.id)
-            return
-    else:
-        db.addGuild(ctx.guild.id, ctx.guild.name)
-        guild_ids.append(ctx.guild.id)
+    if db.getGuildServers(ctx.guild.id, address) is not None:
+        await ctx.send('Address is already added')
+        lock.release(ctx.guild.id)
+        return
+    if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['addressesPerGuild']:
+        await ctx.send('Reached maximum amount of addresses in this guild')
+        lock.release(ctx.guild.id)
+        return
     
     try:
         if address not in servers:
@@ -218,26 +213,26 @@ async def ping():
 
 async def update():
     while True:
-        for guild in guild_ids:
+        for guild in bot.guilds:
             writeCache = False
-            for server in db.getGuildServers(guild):
+            for server in db.getGuildServers(guild.id):
                 if server['address'] not in servers or servers[server['address']]['reply'] is None: continue
                 try:
-                    if cache.Updates.updates[guild][server['address']]['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
+                    if cache.Updates.updates[guild.id][server['address']]['statusTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild.id][server['address']]['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != cache.Updates.updates[guild][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
-                            cache.Updates.updates[guild][server['address']]['statusTime'] = dt.isoformat(dt.now())
-                            cache.Updates.updates[guild][server['address']]['status'] = status
+                        if status != cache.Updates.updates[guild.id][server['address']]['status'] and bot.get_channel(id=server['statusChannel']) is not None:
+                            cache.Updates.updates[guild.id][server['address']]['statusTime'] = dt.isoformat(dt.now())
+                            cache.Updates.updates[guild.id][server['address']]['status'] = status
                             await bot.get_channel(id=server['statusChannel']).edit(name=status)
                             writeCache = True
                     
-                    if config['showPlayers'] and (cache.Updates.updates[guild][server['address']]['playersTime'] is None \
-                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
+                    if config['showPlayers'] and (cache.Updates.updates[guild.id][server['address']]['playersTime'] is None \
+                        or dt.now() - dt.fromisoformat(cache.Updates.updates[guild.id][server['address']]['playersTime']) >= td(minutes=config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
@@ -245,17 +240,17 @@ async def update():
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
-                        if players != cache.Updates.updates[guild][server['address']]['players'] \
+                        if players != cache.Updates.updates[guild.id][server['address']]['players'] \
                             and bot.get_channel(id=server['playersChannel']) is not None \
                             and bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']) is not None:
-                            cache.Updates.updates[guild][server['address']]['playersTime'] = dt.isoformat(dt.now())
-                            cache.Updates.updates[guild][server['address']]['players'] = players
+                            cache.Updates.updates[guild.id][server['address']]['playersTime'] = dt.isoformat(dt.now())
+                            cache.Updates.updates[guild.id][server['address']]['players'] = players
                             await bot.get_channel(id=server['playersChannel']).get_partial_message(server['message']).edit(content=players)
                             writeCache = True
                 except Exception as e: print(e)
                 await asyncio.sleep(0)
             await asyncio.sleep(0)
-            if writeCache: cache.Updates.write(guild)
+            if writeCache: cache.Updates.write(guild.id)
         await asyncio.sleep(1)
 
 async def crash_handler(tasks):
