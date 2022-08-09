@@ -2,8 +2,8 @@ import os
 import json
 
 class cache:
-    def __init__(self):
-        self._path = './cache/'
+    def __init__(self, path='./cache/'):
+        self._path = path
         self.reset()
     
     def reset(self):
@@ -13,7 +13,7 @@ class cache:
 
 class _Updates:
     def __init__(self, cache):
-        self._path = cache._path + 'updates/'
+        self._path = cache._path + '/updates/'
         self.reset()
     
     def reset(self):
@@ -22,7 +22,7 @@ class _Updates:
         self.updates = {}
     
     def build(self, guildServers):
-        self.updates = dict.fromkeys(guildServers.keys(), {})
+        self.updates = dict.fromkeys(guildServers.keys())
         for guild in guildServers:
             if os.path.exists(self._path + str(guild)):
                 with open(self._path + str(guild), 'r') as file:

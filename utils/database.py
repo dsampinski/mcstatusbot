@@ -2,18 +2,28 @@ import sqlite3
 import json
 import os
 
+db_version = 2
+
 class database:
-    def __init__(self, file):
+    def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
+        self.db.execute('CREATE TABLE IF NOT EXISTS _variables(name TEXT PRIMARY KEY, intValue INT, realValue REAL, textValue TEXT)')
+        version = self.db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
+        if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (db_version,))
+        elif version[0] != db_version: self.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (db_version,))
         self.db.execute('''CREATE TABLE IF NOT EXISTS servers(  guild_id INT,
                                                                 server_address TEXT,
                                                                 server_category INT DEFAULT NULL,
                                                                 server_statusChannel INT DEFAULT NULL,
                                                                 server_playersChannel INT DEFAULT NULL,
                                                                 server_message INT DEFAULT NULL,
+                                                                server_statusTime TEXT DEFAULT NULL,
+                                                                server_status TEXT DEFAULT NULL,
+                                                                server_playersTime TEXT DEFAULT NULL,
+                                                                server_players TEXT DEFAULT NULL,
                                                                 PRIMARY KEY(guild_id, server_address)   )''')
         self.db.commit()
-        self._server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message')
+        self._server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message', 'statusTime', 'status', 'playersTime', 'players')
     
     def getServers(self, address=None, addressOnly=False, guildIdOnly=False):
         if address is None:
@@ -48,9 +58,17 @@ class database:
 
     def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):
         if self.getGuildServers(guild_id, address) is None:
-            attr = dict(zip(self._server_attr, (guild_id, address, category, statusChannel, playersChannel, message)))
-            self.db.execute('INSERT INTO servers VALUES(:guild_id, :address, :category, :statusChannel, :playersChannel, :message)', attr)
+            self.db.execute('''INSERT INTO servers(guild_id, server_address, server_category, server_statusChannel, server_playersChannel, server_message)
+                                            VALUES(?, ?, ?, ?, ?, ?)''', (guild_id, address, category, statusChannel, playersChannel, message))
             self.db.commit()
+
+    def updateServerStatus(self, guild_id, address, status):
+        self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_status = ?
+                            WHERE guild_id = ? AND server_address = ?''', (status, guild_id, address))
+    
+    def updateServerPlayers(self, guild_id, address, players):
+        self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_players = ?
+                            WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
 
     def removeServer(self, guild_id, address):
         self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address})
@@ -72,3 +90,21 @@ def migrateFromJson(json_db='db.json', sqlite_db='database.db'):
         db.close()
         print('Done')
     else: print('File does not exist')
+
+def upgradeDB(db_version=None, file='database.db'):
+    if not os.path.exists(file): return
+    if db_version is None:
+        db = sqlite3.connect(file)
+        if db.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="_variables"').fetchone() is not None:
+            version = db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
+            db_version = version[0] if version is not None else None
+        else: db_version = 1
+        db.close()
+    if db_version == 1:
+        print('  Upgrading database')
+        db = database(file)
+        db.db.execute('ALTER TABLE servers ADD server_statusTime TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_players TEXT DEFAULT NULL')
+        db.close()

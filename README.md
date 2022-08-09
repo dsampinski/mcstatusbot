@@ -72,8 +72,12 @@ Reloads the bot's config file
 
 Shuts down the bot
 
+> $admin status
+
+Shows the status of the bot
+
 > $admin export
 
-Exports the database and cache as JSON to the filesystem
+Exports the database as JSON to the filesystem
 
 **The bot must have permission to manage channels and roles*
