@@ -3,6 +3,7 @@ db.json
 config.json
 cache/
 export/
+log.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

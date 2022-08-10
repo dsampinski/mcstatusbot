@@ -4,9 +4,9 @@ A simple Python Discord bot that displays Minecraft servers' statuses and player
 You can [add the public bot to your Discord](https://discord.com/oauth2/authorize?client_id=1001671313393463358&permissions=268435472&scope=bot)
 
 # Setup
-    A Python installation is required
+    Python 3.8+ is required
 
-`pip install -r requirements.txt`
+`pip install -U -r requirements.txt`
 
 ## Run
 `python mcstatusbot.py`
@@ -28,7 +28,7 @@ Interval (in minutes) between each server ping
 
 Interval (in minutes) between each status update
 
-> addressesPerGuild
+> serversPerGuild
 
 Maximum amount of servers that can be added per guild (bypassed by the bot's admin)
 
@@ -72,8 +72,12 @@ Reloads the bot's config file
 
 Shuts down the bot
 
+> $admin status
+
+Shows the status of the bot
+
 > $admin export
 
-Exports the database and cache as JSON to the filesystem
+Exports the database as JSON to the filesystem
 
 **The bot must have permission to manage channels and roles*

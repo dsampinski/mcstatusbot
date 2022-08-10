@@ -2,63 +2,73 @@ import sqlite3
 import json
 import os
 
+db_version = 2
+
 class database:
-    def __init__(self, file):
+    def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
-        self.db.execute('''CREATE TABLE IF NOT EXISTS guilds(guild_id INT PRIMARY KEY, guild_name TEXT, guild_join_date TEXT DEFAULT CURRENT_TIMESTAMP)''')
-        self.db.execute('''CREATE TABLE IF NOT EXISTS servers(guild_id INT REFERENCES guild,
-                                                                server_address TEXT DEFAULT NULL,
+        self.db.execute('CREATE TABLE IF NOT EXISTS _variables(name TEXT PRIMARY KEY, intValue INT, realValue REAL, textValue TEXT)')
+        version = self.db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
+        if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (db_version,))
+        elif version[0] != db_version: self.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (db_version,))
+        self.db.execute('''CREATE TABLE IF NOT EXISTS servers(  guild_id INT,
+                                                                server_address TEXT,
                                                                 server_category INT DEFAULT NULL,
                                                                 server_statusChannel INT DEFAULT NULL,
                                                                 server_playersChannel INT DEFAULT NULL,
                                                                 server_message INT DEFAULT NULL,
-                                                                PRIMARY KEY(guild_id, server_address))''')
+                                                                server_statusTime TEXT DEFAULT NULL,
+                                                                server_status TEXT DEFAULT NULL,
+                                                                server_playersTime TEXT DEFAULT NULL,
+                                                                server_players TEXT DEFAULT NULL,
+                                                                PRIMARY KEY(guild_id, server_address)   )''')
         self.db.commit()
-        self._guild_attr = ('id', 'name', 'join_date')
-        self._server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message')
+        self._server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message', 'statusTime', 'status', 'playersTime', 'players')
     
-    def getKeys(self):
-        query = self.db.execute('SELECT guild_id FROM guilds ORDER BY guild_id').fetchall()
-        guild_ids = [entity[0] for entity in query]
-        query = self.db.execute('SELECT DISTINCT server_address FROM servers ORDER BY server_address').fetchall()
-        srv_addresses = [entity[0] for entity in query]
-        return guild_ids, srv_addresses
-    
-    def getGuilds(self, id=None):
-        if id is None:
-            query = self.db.execute('SELECT * FROM guilds ORDER BY guild_id').fetchall()
-            return [dict(zip(self._guild_attr, entity)) for entity in query]
+    def getServers(self, address=None, addressOnly=False, guildIdOnly=False):
+        if address is None:
+            if addressOnly:
+                query = self.db.execute('SELECT DISTINCT server_address FROM servers ORDER BY server_address').fetchall()
+                return [entity[0] for entity in query]
+            elif guildIdOnly:
+                query = self.db.execute('SELECT DISTINCT guild_id FROM servers ORDER BY guild_id').fetchall()
+                return [entity[0] for entity in query]
+            else:
+                query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
+                return [dict(zip(self._server_attr, entity)) for entity in query]
         else:
-            query = self.db.execute('SELECT * FROM guilds WHERE guild_id = :id', {'id': id}).fetchone()
-            return dict(zip(self._guild_attr, query)) if query is not None else None
+            query = self.db.execute('SELECT * FROM servers WHERE server_address = :address', {'address': address}).fetchone()
+            return dict(zip(self._server_attr, query)) if query is not None else None
 
     def getGuildServers(self, guild_id=None, address=None):
         if guild_id is not None:
             if address is None:
-                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id', {'guild_id': guild_id}).fetchall()
+                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id ORDER BY server_address', {'guild_id': guild_id}).fetchall()
                 return [dict(zip(self._server_attr[1:], entity[1:])) for entity in query]
             else:
                 query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address}).fetchone()
                 return dict(zip(self._server_attr[1:], query[1:])) if query is not None else None
-        query = self.db.execute('''SELECT *
-                                    FROM guilds LEFT NATURAL JOIN servers
-                                    ORDER BY guild_id''').fetchall()
-        guildServers = dict.fromkeys([guild['id'] for guild in self.getGuilds()])
-        for key in guildServers: guildServers[key] = []
-        for entity in query:
-            if entity[3] is not None: guildServers[entity[0]].append(dict(zip(self._server_attr[1:], entity[3:])))
-        return guildServers
-        
-    def addGuild(self, id, name):
-        if self.getGuilds(id) is None:
-            self.db.execute('INSERT INTO guilds(guild_id, guild_name) VALUES(:id, :name)', {'id': id, 'name': name})
-            self.db.commit()
+        else:
+            query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
+            guildServers = dict.fromkeys(self.getServers(guildIdOnly=True))
+            for entity in query:
+                if type(guildServers[entity[0]]) is not list: guildServers[entity[0]] = []
+                guildServers[entity[0]].append(dict(zip(self._server_attr[1:], entity[1:])))
+            return guildServers
 
     def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):
-        if self.getGuilds(guild_id) is not None and self.getGuildServers(guild_id, address) is None:
-            attr = dict(zip(self._server_attr, (guild_id, address, category, statusChannel, playersChannel, message)))
-            self.db.execute('INSERT INTO servers VALUES(:guild_id, :address, :category, :statusChannel, :playersChannel, :message)', attr)
+        if self.getGuildServers(guild_id, address) is None:
+            self.db.execute('''INSERT INTO servers(guild_id, server_address, server_category, server_statusChannel, server_playersChannel, server_message)
+                                            VALUES(?, ?, ?, ?, ?, ?)''', (guild_id, address, category, statusChannel, playersChannel, message))
             self.db.commit()
+
+    def updateServerStatus(self, guild_id, address, status):
+        self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_status = ?
+                            WHERE guild_id = ? AND server_address = ?''', (status, guild_id, address))
+    
+    def updateServerPlayers(self, guild_id, address, players):
+        self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_players = ?
+                            WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
 
     def removeServer(self, guild_id, address):
         self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address})
@@ -75,9 +85,26 @@ def migrateFromJson(json_db='db.json', sqlite_db='database.db'):
         print('Migrating...')
         db = database(sqlite_db)
         for guild in guildServers:
-            db.addGuild(int(guild), None)
             for server in guildServers[guild]:
                 db.addServer(int(guild), server['address'], server['category'], server['statusChannel'], server['playersChannel'], server['message'])
         db.close()
         print('Done')
     else: print('File does not exist')
+
+def upgradeDB(db_version=None, file='database.db'):
+    if not os.path.exists(file): return
+    if db_version is None:
+        db = sqlite3.connect(file)
+        if db.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="_variables"').fetchone() is not None:
+            version = db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
+            db_version = version[0] if version is not None else None
+        else: db_version = 1
+        db.close()
+    if db_version == 1:
+        print('  Upgrading database')
+        db = database(file)
+        db.db.execute('ALTER TABLE servers ADD server_statusTime TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
+        db.db.execute('ALTER TABLE servers ADD server_players TEXT DEFAULT NULL')
+        db.close()
