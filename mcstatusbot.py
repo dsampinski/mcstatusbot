@@ -39,9 +39,8 @@ async def init():
     upgradeDB('database.db')
     db = database('database.db')
     print('  Initializing servers')
-    srv_addresses = db.getServers(addressOnly=True)
-    servers = dict.fromkeys(srv_addresses)
-    for address in srv_addresses:
+    servers = dict.fromkeys(db.getServers(addressOnly=True))
+    for address in servers:
         try: servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
         except Exception as e: logging.info(f'Error initializing {address}: {str(e)}')
     print('  Initializing tasks')
@@ -84,7 +83,7 @@ async def com_status(ctx):
     taskStatus = 'All tasks are running'
     for task in tasks.values():
         if task.done(): taskStatus = 'Task(s) not running'
-    await ctx.send('Bot status:\nCurrently in {} guild(s)\nWatching {} Minecraft server(s)\n{}'.format(len(bot.guilds), len(servers), taskStatus))
+    await ctx.send(f'Bot status:\nCurrently in {len(bot.guilds)} guild(s)\nWatching {len(servers)} Minecraft server(s)\n{taskStatus}')
     
 
 @grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
@@ -145,7 +144,7 @@ async def com_add(ctx, address, name):
         await ctx.send('You do not have permission to manage channels')
         return
     
-    await lock.acquire(ctx.guild.id)
+    if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
         logging.debug(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Server is already added')
@@ -198,7 +197,7 @@ async def com_rem(ctx, address):
         await ctx.send('You do not have permission to manage channels')
         return
     
-    await lock.acquire(ctx.guild.id)
+    if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
         try:
             server = db.getGuildServers(ctx.guild.id, address)
@@ -213,6 +212,7 @@ async def com_rem(ctx, address):
             await ctx.send('Error: ' + str(e))
 
         db.removeServer(ctx.guild.id, address)
+        if not db.getServers(address): servers.pop(address)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
@@ -237,7 +237,7 @@ async def com_list(ctx):
         await ctx.send('You do not have permission to manage channels')
         return
     
-    await lock.acquire(ctx.guild.id)
+    if not await lock.acquire(ctx.guild.id): return
     addresses = 'Servers added to this guild:\n'
     for server in db.getGuildServers(ctx.guild.id):
         addresses += server['address'] + '\n'
@@ -314,7 +314,7 @@ async def bot_status():
                 await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers | $info', type=discord.ActivityType.watching))
                 logging.info('Updated bot status')
             except Exception as e: logging.info(f'Error updating bot status: {str(e)}')
-        await asyncio.sleep(10)
+        await asyncio.sleep(3600)
 
 async def crash_handler(tasks):
     while True:
