@@ -37,8 +37,8 @@ class database:
                 query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
                 return [dict(zip(self._server_attr, entity)) for entity in query]
         else:
-            query = self.db.execute('SELECT * FROM servers WHERE server_address = :address', {'address': address}).fetchone()
-            return dict(zip(self._server_attr, query)) if query is not None else None
+            query = self.db.execute('SELECT * FROM servers WHERE server_address = :address ORDER BY server_address', {'address': address}).fetchall()
+            return [dict(zip(self._server_attr, entity)) for entity in query]
 
     def getGuildServers(self, guild_id=None, address=None):
         if guild_id is not None:
