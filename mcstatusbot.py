@@ -306,15 +306,15 @@ async def bot_login(token):
         loop.stop()
 
 async def bot_status():
-    last = None
+    num = None
     while True:
-        if bot.is_ready() and len(servers) != last:
-            last = len(servers)
+        if bot.is_ready() and (num is None or len(servers) != num and len(servers) > 1):
+            num = len(servers)
             try:
-                await bot.change_presence(activity=discord.Activity(name=f'{len(servers)} MC servers | $info', type=discord.ActivityType.watching))
+                await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers | $info', type=discord.ActivityType.watching))
                 logging.info('Updated bot status')
             except Exception as e: logging.info(f'Error updating bot status: {str(e)}')
-        await asyncio.sleep(3600)
+        await asyncio.sleep(10)
 
 async def crash_handler(tasks):
     while True:
