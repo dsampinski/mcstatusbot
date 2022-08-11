@@ -36,8 +36,8 @@ async def init():
 
     await lock.acquire('init')
     print('--Initializing database')
-    upgradeDB()
-    db = database()
+    upgradeDB('database.db')
+    db = database('database.db')
     print('  Initializing servers')
     srv_addresses = db.getServers(addressOnly=True)
     servers = dict.fromkeys(srv_addresses)
@@ -63,8 +63,6 @@ async def on_ready():
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
     logging.info(f'{ctx.author} ran $ping in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    for task in tasks.values():
-        if task.done(): return
     await ctx.send('Pong')
 
 @bot.command(name='info', help='Shows info about the bot', brief='Shows bot info')
@@ -76,7 +74,7 @@ async def com_info(ctx):
 @bot.group(name='admin', hidden=True)
 async def grp_admin(ctx): pass
 
-@grp_admin.command(name='status', help='Shows the status of the bot')
+@grp_admin.command(name='status', help='Shows the status of the bot', brief='Shows bot status')
 async def com_status(ctx):
     logging.info(f'{ctx.author} ran $admin status in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
@@ -89,7 +87,7 @@ async def com_status(ctx):
     await ctx.send('Bot status:\nCurrently in {} guild(s)\nWatching {} Minecraft server(s)\n{}'.format(len(bot.guilds), len(servers), taskStatus))
     
 
-@grp_admin.command(name='export', help='Exports the database as JSON to the filesystem')
+@grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
 async def com_export(ctx):
     logging.info(f'{ctx.author} ran $admin export in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
@@ -105,7 +103,7 @@ async def com_export(ctx):
     logging.info('Exported database')
     await ctx.send('Exported database')
 
-@grp_admin.command(name='reload', help='Reloads the bot\'s config file')
+@grp_admin.command(name='reload', help='Reloads the bot\'s config file', brief='Reloads config')
 async def com_reload(ctx):
     logging.info(f'{ctx.author} ran $admin reload in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     global config
@@ -122,7 +120,7 @@ async def com_reload(ctx):
     logging.info('Reloaded config')
     await ctx.send('Reloaded config')
 
-@grp_admin.command(name='shutdown', help='Shuts down the bot')
+@grp_admin.command(name='shutdown', help='Shuts down the bot', brief='Shuts down bot')
 async def com_shutdown(ctx):
     logging.info(f'{ctx.author} ran $admin shutdown in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
@@ -173,12 +171,13 @@ async def com_add(ctx, address, name):
             statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
             if config['showPlayers']:
                 # playChan = await ctx.guild.create_text_channel('players', category=newCat)
-                msg = await statChan.send('Pinging...')
+                playChan = statChan
+                msg = await playChan.send('Pinging...')
         except Exception as e:
             logging.debug(f'Error creating channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
             await ctx.send('Error: ' + str(e))
         else:
-            db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(statChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
+            db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(playChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
             logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
             logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
             await ctx.send('Added {}\'s status to this guild'.format(address))
@@ -247,11 +246,12 @@ async def com_list(ctx):
 
 async def ping():
     while True:
-        for server in servers.values():
+        for address, server in servers.items():
             if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
                 server['time'] = dt.utcnow()
                 try: server['reply'] = await server['lookup'].async_status()
                 except Exception: server['reply'] = 'offline'
+                logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 
@@ -263,15 +263,17 @@ async def update():
                 if server['address'] not in servers or servers[server['address']]['reply'] is None: continue
                 try:
                     if server['statusTime'] is None \
-                        or dt.utcnow() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(5, config['updateInterval'])):
+                        or dt.utcnow() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(6, config['updateInterval'])):
                         if servers[server['address']]['reply'] != 'offline':
                             if servers[server['address']]['reply'].players.sample is not None:
                                 status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
                             else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
                         else: status = '🔴 OFFLINE'
-                        if status != server['status'] and bot.get_channel(server['statusChannel']) is not None:
+                        statChan = bot.get_channel(server['statusChannel'])
+                        if status != server['status'] and statChan is not None:
                             db.updateServerStatus(guild.id, server['address'], status)
-                            await bot.get_channel(server['statusChannel']).edit(name=status)
+                            await statChan.edit(name=status)
+                            logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
                     
                     if config['showPlayers'] and (server['playersTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['playersTime']) >= td(minutes=config['updateInterval'])):
@@ -282,11 +284,11 @@ async def update():
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
-                        if players != server['players'] \
-                            and bot.get_channel(server['playersChannel']) is not None \
-                            and bot.get_channel(server['playersChannel']).get_partial_message(server['message']) is not None:
+                        msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
+                        if players != server['players'] and msg is not None:
                             db.updateServerPlayers(guild.id, server['address'], players)
-                            await bot.get_channel(server['playersChannel']).get_partial_message(server['message']).edit(content=players)
+                            await msg.edit(content=players)
+                            logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
                 except Exception as e:
                     logging.info(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                 await asyncio.sleep(0)
@@ -294,11 +296,22 @@ async def update():
             db.db.commit()
         await asyncio.sleep(1)
 
+async def bot_login(token):
+    try:
+        await bot.start(token)
+    except Exception as e:
+        logging.info(f'Error logging in: {str(e)}')
+        print('  ' + str(e))
+        await bot.close()
+        loop.stop()
+
 async def bot_status():
+    last = None
     while True:
-        if bot.is_ready():
+        if bot.is_ready() and len(servers) != last:
+            last = len(servers)
             try:
-                await bot.change_presence(activity=discord.Activity(name='{} MC servers'.format(len(servers)), type=discord.ActivityType.watching))
+                await bot.change_presence(activity=discord.Activity(name=f'{len(servers)} MC servers | $info', type=discord.ActivityType.watching))
                 logging.info('Updated bot status')
             except Exception as e: logging.info(f'Error updating bot status: {str(e)}')
         await asyncio.sleep(3600)
@@ -312,15 +325,6 @@ async def crash_handler(tasks):
                 tasks[method] = loop.create_task(method())
                 logging.warning(f'{method.__name__} task has crashed and been restarted')
                 print(f'--Restarted task: {method.__name__}')
-
-async def bot_login(token):
-    try:
-        await bot.start(token)
-    except Exception as e:
-        logging.info(f'Error logging in: {str(e)}')
-        print('  ' + str(e))
-        await bot.close()
-        loop.stop()
 
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)

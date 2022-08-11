@@ -91,7 +91,7 @@ def migrateFromJson(json_db='db.json', sqlite_db='database.db'):
         print('Done')
     else: print('File does not exist')
 
-def upgradeDB(db_version=None, file='database.db'):
+def upgradeDB(file='database.db', db_version=None):
     if not os.path.exists(file): return
     if db_version is None:
         db = sqlite3.connect(file)
