@@ -160,8 +160,11 @@ async def com_add(ctx, address, name):
     
     try:
         if address not in servers:
+            await lock.acquire('servers')
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
+            lock.release('servers')
     except Exception as e:
+        lock.release('servers')
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         await ctx.send('Error: ' + str(e))
     else:
@@ -214,7 +217,10 @@ async def com_rem(ctx, address):
             await ctx.send('Error: ' + str(e))
 
         db.removeServers(ctx.guild.id, address)
-        if not db.getServers(address): servers.pop(address)
+        if not db.getServers(address):
+            await lock.acquire('servers')
+            servers.pop(address)
+            lock.release('servers')
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
@@ -255,10 +261,14 @@ async def on_guild_remove(guild):
     logging.info(f'Exited {guild} ({guild.id})')
     addresses = db.removeServers(guild.id)
     for address in addresses:
-        if not db.getServers(address): servers.pop(address)
+        if not db.getServers(address):
+            await lock.acquire('servers')
+            servers.pop(address)
+            lock.release('servers')
 
 async def ping():
     while True:
+        await lock.acquire('servers')
         for address, server in servers.items():
             if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
                 server['time'] = dt.utcnow()
@@ -266,7 +276,8 @@ async def ping():
                 except Exception: server['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
-            if lock.keys: break
+            if len(lock.keys['servers']) > 1: break
+        lock.release('servers')
         await asyncio.sleep(1)
 
 async def update():
