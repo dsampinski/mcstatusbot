@@ -11,7 +11,7 @@ class keylock:
             self.keys[key].append(trig)
         else:
             trig = 0
-            self.keys[key] = [0]
+            self.keys[key] = [trig]
         while self.keys[key][0] != trig or (key != 'init' and 'init' in self.keys): await asyncio.sleep(0)
         return True
     def release(self, key):

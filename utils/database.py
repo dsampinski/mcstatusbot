@@ -50,11 +50,8 @@ class database:
                 query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address}).fetchone()
                 return dict(zip(self._server_attr[1:], query[1:])) if query is not None else None
         else:
-            query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
             guildServers = dict.fromkeys(self.getServers(guildIdOnly=True))
-            for entity in query:
-                if type(guildServers[entity[0]]) is not list: guildServers[entity[0]] = []
-                guildServers[entity[0]].append(dict(zip(self._server_attr[1:], entity[1:])))
+            for guild in guildServers: guildServers[guild] = self.getGuildServers(guild)
             return guildServers
 
     def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):

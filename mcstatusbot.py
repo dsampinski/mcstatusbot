@@ -159,12 +159,12 @@ async def com_add(ctx, address, name):
         return
     
     try:
+        await lock.acquire(address)
         if address not in servers:
-            await lock.acquire('servers')
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
-            lock.release('servers')
+        lock.release(address)
     except Exception as e:
-        lock.release('servers')
+        lock.release(address)
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         await ctx.send('Error: ' + str(e))
     else:
@@ -218,9 +218,9 @@ async def com_rem(ctx, address):
 
         db.removeServers(ctx.guild.id, address)
         if not db.getServers(address):
-            await lock.acquire('servers')
+            await lock.acquire(address)
             servers.pop(address)
-            lock.release('servers')
+            lock.release(address)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
@@ -259,25 +259,26 @@ async def on_guild_join(guild):
 @bot.event
 async def on_guild_remove(guild):
     logging.info(f'Exited {guild} ({guild.id})')
+    await lock.acquire(guild.id)
     addresses = db.removeServers(guild.id)
+    lock.release(guild.id)
     for address in addresses:
         if not db.getServers(address):
-            await lock.acquire('servers')
+            await lock.acquire(address)
             servers.pop(address)
-            lock.release('servers')
+            lock.release(address)
 
 async def ping():
     while True:
-        await lock.acquire('servers')
-        for address, server in servers.items():
-            if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
-                server['time'] = dt.utcnow()
-                try: server['reply'] = await server['lookup'].async_status()
-                except Exception: server['reply'] = 'offline'
+        for address in list(servers):
+            await lock.acquire(address)
+            if address in servers and (servers[address]['time'] is None or dt.utcnow() - servers[address]['time'] >= td(minutes=config['pingInterval'])):
+                servers[address]['time'] = dt.utcnow()
+                try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
+                except Exception: servers[address]['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
+            lock.release(address)
             await asyncio.sleep(0)
-            if len(lock.keys['servers']) > 1: break
-        lock.release('servers')
         await asyncio.sleep(1)
 
 async def update():
