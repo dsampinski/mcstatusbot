@@ -13,7 +13,9 @@ intents=discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot('$', intents=intents)
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
-logging.basicConfig(filename='log.txt', filemode='w', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+if not os.path.exists('./logs/'): os.mkdir('./logs/')
+logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+logging.info('====================BEGIN====================')
 
 async def init():
     global config
@@ -157,9 +159,12 @@ async def com_add(ctx, address, name):
         return
     
     try:
+        await lock.acquire(address)
         if address not in servers:
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
+        lock.release(address)
     except Exception as e:
+        lock.release(address)
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         await ctx.send('Error: ' + str(e))
     else:
@@ -211,8 +216,11 @@ async def com_rem(ctx, address):
             logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
             await ctx.send('Error: ' + str(e))
 
-        db.removeServer(ctx.guild.id, address)
-        if not db.getServers(address): servers.pop(address)
+        db.removeServers(ctx.guild.id, address)
+        if not db.getServers(address):
+            await lock.acquire(address)
+            servers.pop(address)
+            lock.release(address)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
@@ -244,14 +252,32 @@ async def com_list(ctx):
     await ctx.send(addresses)
     lock.release(ctx.guild.id)
 
+@bot.event
+async def on_guild_join(guild):
+    logging.info(f'Joined {guild} ({guild.id})')
+
+@bot.event
+async def on_guild_remove(guild):
+    logging.info(f'Exited {guild} ({guild.id})')
+    await lock.acquire(guild.id)
+    addresses = db.removeServers(guild.id)
+    lock.release(guild.id)
+    for address in addresses:
+        if not db.getServers(address):
+            await lock.acquire(address)
+            servers.pop(address)
+            lock.release(address)
+
 async def ping():
     while True:
-        for address, server in servers.items():
-            if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
-                server['time'] = dt.utcnow()
-                try: server['reply'] = await server['lookup'].async_status()
-                except Exception: server['reply'] = 'offline'
+        for address in list(servers):
+            await lock.acquire(address)
+            if address in servers and (servers[address]['time'] is None or dt.utcnow() - servers[address]['time'] >= td(minutes=config['pingInterval'])):
+                servers[address]['time'] = dt.utcnow()
+                try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
+                except Exception: servers[address]['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
+            lock.release(address)
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 
@@ -300,7 +326,7 @@ async def bot_login(token):
     try:
         await bot.start(token)
     except Exception as e:
-        logging.info(f'Error logging in: {str(e)}')
+        logging.error(f'Error logging in: {str(e)}')
         print('  ' + str(e))
         await bot.close()
         loop.stop()
@@ -330,3 +356,5 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 loop.create_task(init())
 loop.run_forever()
+
+logging.info('=====================END=====================')

@@ -7,6 +7,7 @@ db_version = 2
 class database:
     def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
+        self.db.execute('PRAGMA journal_mode = MEMORY')
         self.db.execute('CREATE TABLE IF NOT EXISTS _variables(name TEXT PRIMARY KEY, intValue INT, realValue REAL, textValue TEXT)')
         version = self.db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
         if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (db_version,))
@@ -49,11 +50,8 @@ class database:
                 query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address}).fetchone()
                 return dict(zip(self._server_attr[1:], query[1:])) if query is not None else None
         else:
-            query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
             guildServers = dict.fromkeys(self.getServers(guildIdOnly=True))
-            for entity in query:
-                if type(guildServers[entity[0]]) is not list: guildServers[entity[0]] = []
-                guildServers[entity[0]].append(dict(zip(self._server_attr[1:], entity[1:])))
+            for guild in guildServers: guildServers[guild] = self.getGuildServers(guild)
             return guildServers
 
     def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):
@@ -70,9 +68,15 @@ class database:
         self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_players = ?
                             WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
 
-    def removeServer(self, guild_id, address):
-        self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address})
+    def removeServers(self, guild_id, address=None):
+        if address is None:
+            addresses = [server['address'] for server in self.getGuildServers(guild_id)]
+            self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id', {'guild_id': guild_id})
+            self.db.commit()
+            return addresses
+        else: self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address})
         self.db.commit()
+            
 
     def close(self):
         self.db.commit()
