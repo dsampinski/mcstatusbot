@@ -13,7 +13,9 @@ intents=discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot('$', intents=intents)
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
-logging.basicConfig(filename='log.txt', filemode='w', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+if not os.path.exists('./logs/'): os.mkdir('./logs/')
+logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+logging.info('====================BEGIN====================')
 
 async def init():
     global config
@@ -211,7 +213,7 @@ async def com_rem(ctx, address):
             logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
             await ctx.send('Error: ' + str(e))
 
-        db.removeServer(ctx.guild.id, address)
+        db.removeServers(ctx.guild.id, address)
         if not db.getServers(address): servers.pop(address)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
@@ -244,6 +246,17 @@ async def com_list(ctx):
     await ctx.send(addresses)
     lock.release(ctx.guild.id)
 
+@bot.event
+async def on_guild_join(guild):
+    logging.info(f'Joined {guild} ({guild.id})')
+
+@bot.event
+async def on_guild_remove(guild):
+    logging.info(f'Exited {guild} ({guild.id})')
+    addresses = db.removeServers(guild.id)
+    for address in addresses:
+        if not db.getServers(address): servers.pop(address)
+
 async def ping():
     while True:
         for address, server in servers.items():
@@ -253,6 +266,7 @@ async def ping():
                 except Exception: server['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
+            if lock.keys: break
         await asyncio.sleep(1)
 
 async def update():
@@ -300,7 +314,7 @@ async def bot_login(token):
     try:
         await bot.start(token)
     except Exception as e:
-        logging.info(f'Error logging in: {str(e)}')
+        logging.error(f'Error logging in: {str(e)}')
         print('  ' + str(e))
         await bot.close()
         loop.stop()
@@ -330,3 +344,5 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 loop.create_task(init())
 loop.run_forever()
+
+logging.info('=====================END=====================')
