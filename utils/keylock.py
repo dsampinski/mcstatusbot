@@ -12,7 +12,7 @@ class keylock:
         else:
             trig = 0
             self.keys[key] = [trig]
-        while self.keys[key][0] != trig or (key != 'init' and 'init' in self.keys): await asyncio.sleep(0)
+        while self.keys[key][0] != trig or (key != 'master' and 'master' in self.keys): await asyncio.sleep(0)
         return True
     def release(self, key):
         if key in self.keys:

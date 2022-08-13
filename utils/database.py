@@ -63,10 +63,12 @@ class database:
     def updateServerStatus(self, guild_id, address, status):
         self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_status = ?
                             WHERE guild_id = ? AND server_address = ?''', (status, guild_id, address))
+        self.db.commit()
     
     def updateServerPlayers(self, guild_id, address, players):
         self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", 'NOW'), server_players = ?
                             WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
+        self.db.commit()
 
     def removeServers(self, guild_id, address=None):
         if address is None:
