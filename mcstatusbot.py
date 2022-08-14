@@ -159,9 +159,12 @@ async def com_add(ctx, address, name):
         return
     
     try:
+        await lock.acquire(address)
         if address not in servers:
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
+        lock.release(address)
     except Exception as e:
+        lock.release(address)
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         await ctx.send('Error: ' + str(e))
     else:
@@ -182,7 +185,7 @@ async def com_add(ctx, address, name):
             logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
             logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
             await ctx.send('Added {}\'s status to this guild'.format(address))
-    finally: lock.release(ctx.guild.id)
+    lock.release(ctx.guild.id)
 @com_add.error
 async def com_add_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -214,6 +217,10 @@ async def com_rem(ctx, address):
             await ctx.send('Error: ' + str(e))
 
         db.removeServers(ctx.guild.id, address)
+        await lock.acquire(address)
+        if not db.getServers(address):
+            servers.pop(address)
+        lock.release(address)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
@@ -253,16 +260,21 @@ async def on_guild_join(guild):
 async def on_guild_remove(guild):
     logging.info(f'Left {guild} ({guild.id})')
     await lock.acquire(guild.id)
-    db.removeServers(guild.id)
+    addresses = db.removeServers(guild.id)
     lock.release(guild.id)
+    for address in addresses:
+        await lock.acquire(address)
+        if not db.getServers(address):
+            servers.pop(address)
+        lock.release(address)
 
 async def ping():
     while True:
-        for address in list(servers):
-            if servers[address]['time'] is None or dt.utcnow() - servers[address]['time'] >= td(minutes=config['pingInterval']):
-                servers[address]['time'] = dt.utcnow()
-                try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
-                except Exception: servers[address]['reply'] = 'offline'
+        for address, server in list(servers.items()):
+            if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
+                server['time'] = dt.utcnow()
+                try: server['reply'] = await server['lookup'].async_status()
+                except Exception: server['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
@@ -272,13 +284,14 @@ async def update():
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
                 if server['address'] not in servers or servers[server['address']]['reply'] is None: continue
+                srv = servers[server['address']]
                 try:
                     if server['statusTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(6, config['updateInterval'])):
-                        if servers[server['address']]['reply'] != 'offline':
-                            if servers[server['address']]['reply'].players.sample is not None:
-                                status = '🟢 ONLINE: ' + str(servers[server['address']]['reply'].players.online) + ' / ' + str(servers[server['address']]['reply'].players.max)
-                            else: status = '🟢 ONLINE: 0 / ' + str(servers[server['address']]['reply'].players.max)
+                        if srv['reply'] != 'offline':
+                            if srv['reply'].players.sample is not None:
+                                status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
+                            else: status = '🟢 ONLINE: 0 / ' + str(srv['reply'].players.max)
                         else: status = '🔴 OFFLINE'
                         statChan = bot.get_channel(server['statusChannel'])
                         if status != server['status'] and statChan is not None:
@@ -288,10 +301,10 @@ async def update():
                     
                     if config['showPlayers'] and (server['playersTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['playersTime']) >= td(minutes=config['updateInterval'])):
-                        if servers[server['address']]['reply'] != 'offline':
-                            if servers[server['address']]['reply'].players.sample is not None:
+                        if srv['reply'] != 'offline':
+                            if srv['reply'].players.sample is not None:
                                 players = 'Players:\n\n'
-                                for player in servers[server['address']]['reply'].players.sample:
+                                for player in srv['reply'].players.sample:
                                     players += player.name + '\n'
                             else: players = 'EMPTY'
                         else: players = 'OFFLINE'
@@ -318,9 +331,8 @@ async def bot_login(token):
 async def bot_status():
     num = None
     while True:
-        length = len(db.getServers(addressOnly=True))
-        if bot.is_ready() and (num is None or length != num):
-            num = length
+        if bot.is_ready() and (num is None or len(servers) != num):
+            num = len(servers)
             try:
                 await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers | $info', type=discord.ActivityType.watching))
                 logging.info('Updated bot status')
