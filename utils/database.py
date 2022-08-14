@@ -11,7 +11,6 @@ class database:
         self.db.execute('CREATE TABLE IF NOT EXISTS _variables(name TEXT PRIMARY KEY, intValue INT, realValue REAL, textValue TEXT)')
         version = self.db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
         if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (db_version,))
-        elif version[0] != db_version: self.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (db_version,))
         self.db.execute('''CREATE TABLE IF NOT EXISTS servers(  guild_id INT,
                                                                 server_address TEXT,
                                                                 server_category INT DEFAULT NULL,
@@ -97,20 +96,21 @@ def migrateFromJson(json_db='db.json', sqlite_db='database.db'):
         print('Done')
     else: print('File does not exist')
 
-def upgradeDB(file='database.db', db_version=None):
+def upgradeDB(file='database.db', version=None):
     if not os.path.exists(file): return
-    if db_version is None:
+    if version is None:
         db = sqlite3.connect(file)
         if db.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="_variables"').fetchone() is not None:
             version = db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
-            db_version = version[0] if version is not None else None
-        else: db_version = 1
+            version = version[0] if version is not None else None
+        else: version = 1
         db.close()
-    if db_version == 1:
+    if version == 1:
         print('  Upgrading database')
         db = database(file)
         db.db.execute('ALTER TABLE servers ADD server_statusTime TEXT DEFAULT NULL')
         db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
         db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
         db.db.execute('ALTER TABLE servers ADD server_players TEXT DEFAULT NULL')
+        db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (db_version,))
         db.close()
