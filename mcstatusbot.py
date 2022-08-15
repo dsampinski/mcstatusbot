@@ -302,12 +302,11 @@ async def update():
                     if config['showPlayers'] and (server['playersTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['playersTime']) >= td(minutes=config['updateInterval'])):
                         if srv['reply'] != 'offline':
+                            players = '-===ONLINE===-\n'
                             if srv['reply'].players.sample is not None:
-                                players = 'Players:\n\n'
                                 for player in srv['reply'].players.sample:
                                     players += player.name + '\n'
-                            else: players = 'EMPTY'
-                        else: players = 'OFFLINE'
+                        else: players = '-===OFFLINE===-'
                         msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
                         if players != server['players'] and msg is not None:
                             db.updateServerPlayers(guild.id, server['address'], players)
