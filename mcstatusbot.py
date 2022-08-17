@@ -348,9 +348,10 @@ async def crash_handler(tasks):
                 logging.warning(f'{method.__name__} task has crashed and been restarted')
                 print(f'--Restarted task: {method.__name__}')
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-loop.create_task(init())
-loop.run_forever()
+if __name__ == '__main__':
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(init())
+    loop.run_forever()
 
-logging.info('=====================END=====================')
+    logging.info('=====================END=====================')
