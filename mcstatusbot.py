@@ -4,18 +4,20 @@ from mcstatus.server import JavaServer as js
 import asyncio
 import os
 import json
+import logging
 from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 from utils.database import upgradeDB, database
-import logging
+
+if not os.path.exists('./logs/'): os.mkdir('./logs/')
+logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+logging.info('====================BEGIN====================')
+
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
 
 intents=discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot('$', intents=intents)
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
-if not os.path.exists('./logs/'): os.mkdir('./logs/')
-logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
-logging.info('====================BEGIN====================')
 
 async def init():
     global config
@@ -270,11 +272,11 @@ async def on_guild_remove(guild):
 
 async def ping():
     while True:
-        for address, server in list(servers.items()):
-            if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
-                server['time'] = dt.utcnow()
-                try: server['reply'] = await server['lookup'].async_status()
-                except Exception: server['reply'] = 'offline'
+        for address, srv in list(servers.items()):
+            if srv['time'] is None or dt.utcnow() - srv['time'] >= td(minutes=config['pingInterval']):
+                srv['time'] = dt.utcnow()
+                try: srv['reply'] = await srv['lookup'].async_status()
+                except Exception: srv['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
