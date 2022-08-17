@@ -289,9 +289,7 @@ async def update():
                     if server['statusTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(6, config['updateInterval'])):
                         if srv['reply'] != 'offline':
-                            if srv['reply'].players.sample is not None:
-                                status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
-                            else: status = '🟢 ONLINE: 0 / ' + str(srv['reply'].players.max)
+                            status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
                         else: status = '🔴 OFFLINE'
                         statChan = bot.get_channel(server['statusChannel'])
                         if status != server['status'] and statChan is not None:
