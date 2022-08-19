@@ -4,18 +4,20 @@ from mcstatus.server import JavaServer as js
 import asyncio
 import os
 import json
+import logging
 from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 from utils.database import upgradeDB, database
-import logging
+
+if not os.path.exists('./logs/'): os.mkdir('./logs/')
+logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+logging.info('====================BEGIN====================')
+
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
 
 intents=discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot('$', intents=intents)
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
-if not os.path.exists('./logs/'): os.mkdir('./logs/')
-logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
-logging.info('====================BEGIN====================')
 
 async def init():
     global config
@@ -270,11 +272,11 @@ async def on_guild_remove(guild):
 
 async def ping():
     while True:
-        for address, server in list(servers.items()):
-            if server['time'] is None or dt.utcnow() - server['time'] >= td(minutes=config['pingInterval']):
-                server['time'] = dt.utcnow()
-                try: server['reply'] = await server['lookup'].async_status()
-                except Exception: server['reply'] = 'offline'
+        for address, srv in list(servers.items()):
+            if srv['time'] is None or dt.utcnow() - srv['time'] >= td(minutes=config['pingInterval']):
+                srv['time'] = dt.utcnow()
+                try: srv['reply'] = await srv['lookup'].async_status()
+                except Exception: srv['reply'] = 'offline'
                 logging.debug(f'Pinged {address}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
@@ -289,9 +291,7 @@ async def update():
                     if server['statusTime'] is None \
                         or dt.utcnow() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(6, config['updateInterval'])):
                         if srv['reply'] != 'offline':
-                            if srv['reply'].players.sample is not None:
-                                status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
-                            else: status = '🟢 ONLINE: 0 / ' + str(srv['reply'].players.max)
+                            status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
                         else: status = '🔴 OFFLINE'
                         statChan = bot.get_channel(server['statusChannel'])
                         if status != server['status'] and statChan is not None:
@@ -348,9 +348,10 @@ async def crash_handler(tasks):
                 logging.warning(f'{method.__name__} task has crashed and been restarted')
                 print(f'--Restarted task: {method.__name__}')
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-loop.create_task(init())
-loop.run_forever()
+if __name__ == '__main__':
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(init())
+    loop.run_forever()
 
-logging.info('=====================END=====================')
+    logging.info('=====================END=====================')
