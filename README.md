@@ -7,6 +7,7 @@ You can [add the public bot to your Discord](https://discord.com/oauth2/authoriz
     Git and Python 3.8+ are required
 
 `git clone https://github.com/dsampinski/mcstatusbot.git && cd mcstatusbot`
+
 `pip install -U -r requirements.txt`
 
 ## Run
