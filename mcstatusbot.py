@@ -143,7 +143,7 @@ async def com_shutdown(ctx):
     loop.stop()
 
 @bot.command(name='add', help='Adds a server\'s status to the guild', brief='Adds a server')
-async def com_add(ctx, address, name):
+async def com_add(ctx, address, name=None):
     logging.info(f'{ctx.author} ran $add {address} {name} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if not isinstance(ctx.author, discord.member.Member):
         logging.debug(f'{ctx.author} is in a DM channel')
@@ -176,7 +176,7 @@ async def com_add(ctx, address, name):
         await ctx.send('Error: ' + str(e))
     else:
         try:
-            newCat = await ctx.guild.create_category(name)
+            newCat = await ctx.guild.create_category(name if name is not None else address)
             await newCat.set_permissions(bot.user, send_messages=True, connect=True)
             await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
             statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
