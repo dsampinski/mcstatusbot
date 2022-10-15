@@ -35,7 +35,7 @@ async def init():
             file.write(json.dumps(config, indent=4))
     
     await lock.acquire('master')
-    print('--Logging in')
+    print('--Connecting')
     loop.create_task(bot_login(config['token']))
 
     await lock.acquire('master')
@@ -62,6 +62,11 @@ async def on_ready():
     print(f'  Logged in as {bot.user}')
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
     lock.release('master')
+
+@bot.event
+async def on_disconnect():
+    logging.info(f'Disconnected and attempting reconnection')
+    print(f'--Reconnecting')
 
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
@@ -138,7 +143,7 @@ async def com_shutdown(ctx):
     loop.stop()
 
 @bot.command(name='add', help='Adds a server\'s status to the guild', brief='Adds a server')
-async def com_add(ctx, address, name):
+async def com_add(ctx, address, name=None):
     logging.info(f'{ctx.author} ran $add {address} {name} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if not isinstance(ctx.author, discord.member.Member):
         logging.debug(f'{ctx.author} is in a DM channel')
@@ -171,7 +176,7 @@ async def com_add(ctx, address, name):
         await ctx.send('Error: ' + str(e))
     else:
         try:
-            newCat = await ctx.guild.create_category(name)
+            newCat = await ctx.guild.create_category(name if name is not None else address)
             await newCat.set_permissions(bot.user, send_messages=True, connect=True)
             await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
             statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
