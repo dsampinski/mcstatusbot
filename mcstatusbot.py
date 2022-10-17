@@ -35,7 +35,6 @@ async def init():
             file.write(json.dumps(config, indent=4))
     
     await lock.acquire('master')
-    print('--Connecting')
     loop.create_task(bot_login(config['token']))
 
     await lock.acquire('master')
@@ -57,16 +56,16 @@ async def init():
     lock.release('master')
 
 @bot.event
+async def on_connect():
+    logging.info(f'Connecting')
+    print(f'--Connecting')
+
+@bot.event
 async def on_ready():
     logging.info(f'Logged in as {bot.user}')
     print(f'  Logged in as {bot.user}')
     print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
     lock.release('master')
-
-@bot.event
-async def on_disconnect():
-    logging.info(f'Disconnected and attempting reconnection')
-    print(f'--Reconnecting')
 
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
