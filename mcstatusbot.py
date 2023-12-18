@@ -154,14 +154,14 @@ async def com_add(ctx, address, name=None):
     
     if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
+        lock.release(ctx.guild.id)
         logging.debug(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Server is already added')
-        lock.release(ctx.guild.id)
         return
     if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['serversPerGuild']:
+        lock.release(ctx.guild.id)
         logging.debug(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
         await ctx.send('Reached maximum amount of servers in this guild')
-        lock.release(ctx.guild.id)
         return
     
     try:
@@ -227,14 +227,14 @@ async def com_rem(ctx, address):
         if not db.getServers(address):
             servers.pop(address)
         lock.release(address)
+        lock.release(ctx.guild.id)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
         await ctx.send('Removed {}\'s status from this guild'.format(address))
-        lock.release(ctx.guild.id)
         return
+    lock.release(ctx.guild.id)
     logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
     await ctx.send('This server does not exist')
-    lock.release(ctx.guild.id)
 @com_rem.error
 async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -255,8 +255,8 @@ async def com_list(ctx):
     addresses = 'Servers added to this guild:\n'
     for server in db.getGuildServers(ctx.guild.id):
         addresses += server['address'] + '\n'
-    await ctx.send(addresses)
     lock.release(ctx.guild.id)
+    await ctx.send(addresses)
 
 @bot.event
 async def on_guild_join(guild):
@@ -273,6 +273,7 @@ async def on_guild_remove(guild):
         if not db.getServers(address):
             servers.pop(address)
         lock.release(address)
+        logging.info(f'Popped {address}')
 
 async def ping():
     while True:
