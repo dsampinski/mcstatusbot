@@ -70,13 +70,15 @@ async def on_ready():
 @bot.command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx):
     logging.info(f'{ctx.author} ran $ping in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    await ctx.send('Pong')
+    try: await ctx.send('Pong')
+    except Exception: pass
 
 @bot.command(name='info', help='Shows info about the bot', brief='Shows bot info')
 async def com_info(ctx):
     logging.info(f'{ctx.author} ran $info in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    await ctx.send('MC Status Bot by GitHub@dsampinski to display Minecraft servers\' statuses\n\
+    try: await ctx.send('MC Status Bot by GitHub@dsampinski to display Minecraft servers\' statuses\n\
                     https://github.com/dsampinski/mcstatusbot')
+    except Exception: pass
 
 @bot.group(name='admin', hidden=True)
 async def grp_admin(ctx): pass
@@ -91,8 +93,8 @@ async def com_status(ctx):
     taskStatus = 'All tasks are running'
     for task in tasks.values():
         if task.done(): taskStatus = 'Task(s) not running'
-    await ctx.send(f'Bot status:\nCurrently in {len(bot.guilds)} guild(s)\nWatching {len(servers)} Minecraft server(s)\n{taskStatus}')
-    
+    try: await ctx.send(f'Bot status:\nCurrently in {len(bot.guilds)} guild(s)\nWatching {len(servers)} Minecraft server(s)\n{taskStatus}')
+    except Exception: pass
 
 @grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
 async def com_export(ctx):
@@ -108,7 +110,8 @@ async def com_export(ctx):
     with open('./export/db.guildServers.json', 'w') as file:
         file.write(json.dumps(db.getGuildServers(), indent=4))
     logging.info('Exported database')
-    await ctx.send('Exported database')
+    try: await ctx.send('Exported database')
+    except Exception: pass
 
 @grp_admin.command(name='reload', help='Reloads the bot\'s config file', brief='Reloads config')
 async def com_reload(ctx):
@@ -125,7 +128,8 @@ async def com_reload(ctx):
         with open('config.json', 'w') as file:
             file.write(json.dumps(config, indent=4))
     logging.info('Reloaded config')
-    await ctx.send('Reloaded config')
+    try: await ctx.send('Reloaded config')
+    except Exception: pass
 
 @grp_admin.command(name='shutdown', help='Shuts down the bot', brief='Shuts down bot')
 async def com_shutdown(ctx):
@@ -135,7 +139,8 @@ async def com_shutdown(ctx):
         return
     
     logging.info('Shutting down...')
-    await ctx.send('Shutting down...')
+    try: await ctx.send('Shutting down...')
+    except Exception: pass
     await lock.close()
     await bot.close()
     db.close()
@@ -149,19 +154,22 @@ async def com_add(ctx, address, name=None):
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         logging.debug(f'{ctx.author} does not have permission to manage channels')
-        await ctx.send('You do not have permission to manage channels')
+        try: await ctx.send('You do not have permission to manage channels')
+        except Exception: pass
         return
     
     if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
         lock.release(ctx.guild.id)
         logging.debug(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
-        await ctx.send('Server is already added')
+        try: await ctx.send('Server is already added')
+        except Exception: pass
         return
     if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['serversPerGuild']:
         lock.release(ctx.guild.id)
         logging.debug(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
-        await ctx.send('Reached maximum amount of servers in this guild')
+        try: await ctx.send('Reached maximum amount of servers in this guild')
+        except Exception: pass
         return
     
     try:
@@ -172,7 +180,8 @@ async def com_add(ctx, address, name=None):
     except Exception as e:
         lock.release(address)
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
-        await ctx.send('Error: ' + str(e))
+        try: await ctx.send('Error: ' + str(e))
+        except Exception: pass
     else:
         try:
             newCat = await ctx.guild.create_category(name if name is not None else address)
@@ -185,17 +194,20 @@ async def com_add(ctx, address, name=None):
                 msg = await playChan.send('Pinging...')
         except Exception as e:
             logging.debug(f'Error creating channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
-            await ctx.send('Error: ' + str(e))
+            try: await ctx.send('Error: ' + str(e))
+            except Exception: pass
         else:
             db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(playChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
             logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
             logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
-            await ctx.send('Added {}\'s status to this guild'.format(address))
+            try: await ctx.send('Added {}\'s status to this guild'.format(address))
+            except Exception: pass
     lock.release(ctx.guild.id)
 @com_add.error
 async def com_add_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send('Invalid arguments\n$add <address> <name>')
+        try: await ctx.send('Invalid arguments\n$add <address> <name>')
+        except Exception: pass
 
 @bot.command(name='rem', help='Removes a server\'s status from the guild', brief='Removes a server')
 async def com_rem(ctx, address):
@@ -205,7 +217,8 @@ async def com_rem(ctx, address):
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         logging.debug(f'{ctx.author} does not have permission to manage channels')
-        await ctx.send('You do not have permission to manage channels')
+        try: await ctx.send('You do not have permission to manage channels')
+        except Exception: pass
         return
     
     if not await lock.acquire(ctx.guild.id): return
@@ -220,7 +233,8 @@ async def com_rem(ctx, address):
                 await bot.get_channel(server['category']).delete()
         except Exception as e:
             logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
-            await ctx.send('Error: ' + str(e))
+            try: await ctx.send('Error: ' + str(e))
+            except Exception: pass
 
         db.removeServers(ctx.guild.id, address)
         await lock.acquire(address)
@@ -230,15 +244,18 @@ async def com_rem(ctx, address):
         lock.release(ctx.guild.id)
         logging.debug(f'Removed {server}')
         logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
-        await ctx.send('Removed {}\'s status from this guild'.format(address))
+        try: await ctx.send('Removed {}\'s status from this guild'.format(address))
+        except Exception: pass
         return
     lock.release(ctx.guild.id)
     logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
-    await ctx.send('This server does not exist')
+    try: await ctx.send('This server does not exist')
+    except Exception: pass
 @com_rem.error
 async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send('Invalid arguments\n$rem <address>')
+        try: await ctx.send('Invalid arguments\n$rem <address>')
+        except Exception: pass
 
 @bot.command(name='list', help='Lists all servers in the guild', brief='Lists servers')
 async def com_list(ctx):
@@ -248,7 +265,8 @@ async def com_list(ctx):
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
         logging.debug(f'{ctx.author} does not have permission to manage channels')
-        await ctx.send('You do not have permission to manage channels')
+        try: await ctx.send('You do not have permission to manage channels')
+        except Exception: pass
         return
     
     if not await lock.acquire(ctx.guild.id): return
@@ -256,7 +274,8 @@ async def com_list(ctx):
     for server in db.getGuildServers(ctx.guild.id):
         addresses += server['address'] + '\n'
     lock.release(ctx.guild.id)
-    await ctx.send(addresses)
+    try: await ctx.send(addresses)
+    except Exception: pass
 
 @bot.event
 async def on_guild_join(guild):
@@ -290,7 +309,7 @@ async def update():
     while True:
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
-                if server['address'] not in servers or servers[server['address']]['reply'] is None: continue
+                if server['address'] not in servers or servers[server['address']] is None or servers[server['address']]['reply'] is None: continue
                 srv = servers[server['address']]
                 try:
                     if server['statusTime'] is None \
