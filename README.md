@@ -44,10 +44,6 @@ Whether to show the players list or not
 
 Pings the bot
 
-> /help
-
-Shows help
-
 ## Users with permission to manage channels
 > /add *address name*
 
