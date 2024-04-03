@@ -38,47 +38,39 @@ Maximum amount of servers that can be added per guild (bypassed by the bot's adm
 
 Whether to show the players list or not
 
-# Commands
+# Slash Commands
 ## Everyone
-> $ping
+> /ping
 
 Pings the bot
 
-> $help
-
-Shows help
-
-> $info
-
-Shows info about the bot
-
 ## Users with permission to manage channels
-> $add *address name*
+> /add *address name*
 
 Adds a server's status to the guild
 
-> $rem *address*
+> /rem *address*
 
 Removes a server's status from the guild
 
-> $list
+> /list
 
 Lists all servers in the guild
 
 ## Bot admin
-> $admin reload
+> /admin reload
 
 Reloads the bot's config file
 
-> $admin shutdown
+> /admin shutdown
 
 Shuts down the bot
 
-> $admin status
+> /admin status
 
 Shows the status of the bot
 
-> $admin export
+> /admin export
 
 Exports the database as JSON to the filesystem
 

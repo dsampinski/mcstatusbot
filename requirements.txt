@@ -1,2 +1,2 @@
-https://github.com/Rapptz/discord.py/tarball/master
+discord.py
 mcstatus
