@@ -10,15 +10,13 @@ from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 from utils.database import database
 
-if not os.path.exists('./logs/'): os.mkdir('./logs/')
 logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
-logging.info('====================BEGIN====================')
 
 config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
 
 intents=discord.Intents.default()
 # intents.message_content = True
-bot = commands.Bot('$', intents=intents, help_command=commands.DefaultHelpCommand(no_category='Commands'))
+bot = commands.AutoShardedBot('$', intents=intents, help_command=commands.DefaultHelpCommand(no_category='Commands'))
 
 async def init():
     global config
@@ -42,16 +40,18 @@ async def init():
     print('--Initializing database')
     if database.updateDB('database.db'): print('  Updated database')
     db = database('database.db')
-    print('  Initializing servers')
     servers = dict.fromkeys(db.getServers(addressOnly=True))
-    for address in servers:
-        try: servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
-        except Exception as e: logging.info(f'Error initializing {address}: {str(e)}')
     print('  Initializing tasks')
     tasks = {ping: loop.create_task(ping()),
              update: loop.create_task(update()),
              bot_status: loop.create_task(bot_status())}
     loop.create_task(crash_handler(tasks))
+    print('  Initializing servers')
+    for address in servers:
+        try:
+            servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
+            logging.debug(f'Initialized {address}')
+        except Exception as e: logging.info(f'Error looking up {address}: {str(e)}')
     print('  Ready\n')
     lock.release('master')
 
@@ -155,52 +155,47 @@ async def com_add(ctx:commands.Context, address, name=None):
     
     if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
-        lock.release(ctx.guild.id)
         logging.debug(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send('Server is already added', ephemeral=True)
         except Exception: pass
+        lock.release(ctx.guild.id)
         return
     if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['serversPerGuild']:
-        lock.release(ctx.guild.id)
         logging.debug(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
         try: await ctx.send('Reached maximum amount of servers in this guild', ephemeral=True)
         except Exception: pass
+        lock.release(ctx.guild.id)
         return
     
     try:
-        await lock.acquire(address)
-        if address not in servers:
-            servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
-        lock.release(address)
+        newCat = await ctx.guild.create_category(name if name is not None else address)
+        await newCat.set_permissions(bot.user, send_messages=True, connect=True)
+        await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
+        statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
+        if config['showPlayers']:
+            # playChan = await ctx.guild.create_text_channel('players', category=newCat)
+            playChan = statChan
+            msg = await playChan.send('Pinging...')
     except Exception as e:
-        lock.release(address)
-        logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
+        logging.debug(f'Error creating channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
         try: await ctx.send('Error: ' + str(e), ephemeral=True)
         except Exception: pass
     else:
+        db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(playChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
+        logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
+        logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
+        try: await ctx.send(f'Added {address}\'s status to this guild', ephemeral=True)
+        except Exception: pass
+        await lock.acquire(address)
         try:
-            newCat = await ctx.guild.create_category(name if name is not None else address)
-            await newCat.set_permissions(bot.user, send_messages=True, connect=True)
-            await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
-            statChan = await ctx.guild.create_voice_channel('Pinging...', category=newCat)
-            if config['showPlayers']:
-                # playChan = await ctx.guild.create_text_channel('players', category=newCat)
-                playChan = statChan
-                msg = await playChan.send('Pinging...')
-        except Exception as e:
-            await lock.acquire(address)
-            if not db.getServers(address):
-                servers.pop(address)
-            lock.release(address)
-            logging.debug(f'Error creating channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
-            try: await ctx.send('Error: ' + str(e), ephemeral=True)
-            except Exception: pass
-        else:
-            db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(playChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
-            logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
-            logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
-            try: await ctx.send('Added {}\'s status to this guild'.format(address), ephemeral=True)
-            except Exception: pass
+            if address not in servers:
+                servers[address] = {'lookup': await js.async_lookup(address), 'time': dt.now(), 'reply': None}
+                logging.debug(f'Initialized {address}')
+                try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
+                except Exception: servers[address]['reply'] = 'offline'
+                logging.debug(f'Pinged {address}')
+        except Exception as e: logging.info(f'Error looking up {address}: {str(e)}')
+        lock.release(address)
     lock.release(ctx.guild.id)
 @com_add.error
 async def com_add_error(ctx, error):
@@ -230,26 +225,23 @@ async def com_rem(ctx:commands.Context, address):
                 await bot.get_channel(server['playersChannel']).delete()
             if bot.get_channel(server['category']) is not None:
                 await bot.get_channel(server['category']).delete()
-        except Exception as e:
-            logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
-            try: await ctx.send('Error: ' + str(e), ephemeral=True)
-            except Exception: pass
-
+        except Exception as e: logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
         db.removeServers(ctx.guild.id, address)
+        logging.debug(f'Removed {server}')
+        logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
+        try: await ctx.send(f'Removed {address}\'s status from this guild', ephemeral=True)
+        except Exception: pass
         await lock.acquire(address)
         if not db.getServers(address):
             servers.pop(address)
+            logging.debug(f'Popped {address}')
         lock.release(address)
         lock.release(ctx.guild.id)
-        logging.debug(f'Removed {server}')
-        logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
-        try: await ctx.send('Removed {}\'s status from this guild'.format(address), ephemeral=True)
-        except Exception: pass
         return
-    lock.release(ctx.guild.id)
     logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
     try: await ctx.send('This server does not exist', ephemeral=True)
     except Exception: pass
+    lock.release(ctx.guild.id)
 @com_rem.error
 async def com_rem_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -276,9 +268,9 @@ async def com_list(ctx:commands.Context):
     addresses = 'Servers added to this guild:\n'
     for server in db.getGuildServers(ctx.guild.id):
         addresses += server['address'] + '\n'
-    lock.release(ctx.guild.id)
     try: await ctx.send(addresses, ephemeral=True)
     except Exception: pass
+    lock.release(ctx.guild.id)
 
 @bot.event
 async def on_guild_join(guild):
@@ -289,17 +281,19 @@ async def on_guild_remove(guild):
     logging.info(f'Left {guild} ({guild.id})')
     await lock.acquire(guild.id)
     addresses = db.removeServers(guild.id)
-    lock.release(guild.id)
     for address in addresses:
+        logging.info(f'Removed {address} from {guild} ({guild.id})')
         await lock.acquire(address)
         if not db.getServers(address):
             servers.pop(address)
+            logging.debug(f'Popped {address}')
         lock.release(address)
-        logging.info(f'Popped {address}')
+    lock.release(guild.id)
 
 async def ping():
     while True:
         for address, srv in list(servers.items()):
+            if srv is None: continue
             if srv['time'] is None or dt.now() - srv['time'] >= td(minutes=config['pingInterval']):
                 srv['time'] = dt.now()
                 try: srv['reply'] = await srv['lookup'].async_status()
@@ -316,7 +310,7 @@ async def update():
                 srv = servers[server['address']]
                 try:
                     if server['statusTime'] is None \
-                        or dt.now() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(6, config['updateInterval'])):
+                        or dt.now() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(5.1, config['updateInterval'])):
                         if srv['reply'] != 'offline':
                             status = '🟢 ONLINE: ' + str(srv['reply'].players.online) + ' / ' + str(srv['reply'].players.max)
                         else: status = '🔴 OFFLINE'
@@ -325,7 +319,8 @@ async def update():
                             db.updateServerStatus(guild.id, server['address'], status)
                             await statChan.edit(name=status)
                             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
-                    
+                except Exception as e: logging.info(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                try:
                     if config['showPlayers'] and (server['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(server['playersTime']) >= td(minutes=config['updateInterval'])):
                         if srv['reply'] != 'offline':
@@ -339,8 +334,7 @@ async def update():
                             db.updateServerPlayers(guild.id, server['address'], players)
                             await msg.edit(content=players)
                             logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
-                except Exception as e:
-                    logging.info(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                except Exception as e: logging.info(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                 await asyncio.sleep(0)
             await asyncio.sleep(0)
         await asyncio.sleep(1)
@@ -350,7 +344,7 @@ async def bot_login(token):
         await bot.start(token)
     except Exception as e:
         logging.error(f'Error logging in: {str(e)}')
-        print('  ' + str(e))
+        print(f'  Error logging in: {str(e)}')
         await bot.close()
         loop.stop()
 
@@ -376,7 +370,10 @@ async def crash_handler(tasks):
                 print(f'--Restarted task: {method.__name__}')
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
+    if not os.path.exists('./logs/'): os.mkdir('./logs/')
+    logging.info('====================BEGIN====================')
+
+    loop = asyncio.new_event_loop()
     loop.create_task(init())
     loop.run_forever()
 

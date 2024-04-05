@@ -27,16 +27,16 @@ class database:
     def getServers(self, address=None, addressOnly=False, guildIdOnly=False):
         if address is None:
             if addressOnly:
-                query = self.db.execute('SELECT DISTINCT server_address FROM servers ORDER BY server_address').fetchall()
+                query = self.db.execute('SELECT DISTINCT server_address FROM servers').fetchall()
                 return [entity[0] for entity in query]
             elif guildIdOnly:
-                query = self.db.execute('SELECT DISTINCT guild_id FROM servers ORDER BY guild_id').fetchall()
+                query = self.db.execute('SELECT DISTINCT guild_id FROM servers').fetchall()
                 return [entity[0] for entity in query]
             else:
-                query = self.db.execute('SELECT * FROM servers ORDER BY guild_id, server_address').fetchall()
+                query = self.db.execute('SELECT * FROM servers').fetchall()
                 return [dict(zip(database._server_attr, entity)) for entity in query]
         else:
-            query = self.db.execute('SELECT * FROM servers WHERE server_address = :address ORDER BY server_address', {'address': address}).fetchall()
+            query = self.db.execute('SELECT * FROM servers WHERE server_address = :address', {'address': address}).fetchall()
             return [dict(zip(database._server_attr, entity)) for entity in query]
 
     def getGuildServers(self, guild_id=None, address=None):
