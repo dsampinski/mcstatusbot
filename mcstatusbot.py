@@ -51,7 +51,7 @@ async def init():
         try:
             servers[address] = {'lookup': await js.async_lookup(address), 'time': None, 'reply': None}
             logging.debug(f'Initialized {address}')
-        except Exception as e: logging.info(f'Error looking up {address}: {str(e)}')
+        except Exception as e: logging.warning(f'Error looking up {address}: {str(e)}')
     print('  Ready\n')
     lock.release('master')
 
@@ -167,7 +167,11 @@ async def com_add(ctx:commands.Context, address, name=None):
         lock.release(ctx.guild.id)
         return
     
+    await lock.acquire(address)
     try:
+        if address not in servers:
+            servers[address] = {'lookup': await js.async_lookup(address), 'time': dt.now(), 'reply': None}
+            logging.debug(f'Initialized {address}')
         newCat = await ctx.guild.create_category(name if name is not None else address)
         await newCat.set_permissions(bot.user, send_messages=True, connect=True)
         await newCat.set_permissions(ctx.guild.default_role, send_messages=False, connect=False)
@@ -177,7 +181,8 @@ async def com_add(ctx:commands.Context, address, name=None):
             playChan = statChan
             msg = await playChan.send('Pinging...')
     except Exception as e:
-        logging.debug(f'Error creating channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
+        if not isinstance(e, discord.DiscordException): logging.warning(f'Error looking up {address}: {str(e)}')
+        logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         try: await ctx.send('Error: ' + str(e), ephemeral=True)
         except Exception: pass
     else:
@@ -186,16 +191,10 @@ async def com_add(ctx:commands.Context, address, name=None):
         logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send(f'Added {address}\'s status to this guild', ephemeral=True)
         except Exception: pass
-        await lock.acquire(address)
-        try:
-            if address not in servers:
-                servers[address] = {'lookup': await js.async_lookup(address), 'time': dt.now(), 'reply': None}
-                logging.debug(f'Initialized {address}')
-                try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
-                except Exception: servers[address]['reply'] = 'offline'
-                logging.debug(f'Pinged {address}')
-        except Exception as e: logging.info(f'Error looking up {address}: {str(e)}')
-        lock.release(address)
+        try: servers[address]['reply'] = await servers[address]['lookup'].async_status()
+        except Exception: servers[address]['reply'] = 'offline'
+        logging.debug(f'Pinged {address}')
+    lock.release(address)
     lock.release(ctx.guild.id)
 @com_add.error
 async def com_add_error(ctx, error):
@@ -232,15 +231,14 @@ async def com_rem(ctx:commands.Context, address):
         try: await ctx.send(f'Removed {address}\'s status from this guild', ephemeral=True)
         except Exception: pass
         await lock.acquire(address)
-        if not db.getServers(address):
+        if address in servers and not db.getServers(address):
             servers.pop(address)
             logging.debug(f'Popped {address}')
         lock.release(address)
-        lock.release(ctx.guild.id)
-        return
-    logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
-    try: await ctx.send('This server does not exist', ephemeral=True)
-    except Exception: pass
+    else:
+        logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
+        try: await ctx.send('This server does not exist', ephemeral=True)
+        except Exception: pass
     lock.release(ctx.guild.id)
 @com_rem.error
 async def com_rem_error(ctx, error):
@@ -284,7 +282,7 @@ async def on_guild_remove(guild):
     for address in addresses:
         logging.info(f'Removed {address} from {guild} ({guild.id})')
         await lock.acquire(address)
-        if not db.getServers(address):
+        if address in servers and not db.getServers(address):
             servers.pop(address)
             logging.debug(f'Popped {address}')
         lock.release(address)
@@ -355,8 +353,8 @@ async def bot_status():
             num = len(servers)
             try:
                 await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers', type=discord.ActivityType.watching))
-                logging.info('Updated bot status')
-            except Exception as e: logging.info(f'Error updating bot status: {str(e)}')
+                logging.info(f'Updated bot status ({num})')
+            except Exception as e: logging.info(f'Error updating bot status ({num}): {str(e)}')
         await asyncio.sleep(3600)
 
 async def crash_handler(tasks):
