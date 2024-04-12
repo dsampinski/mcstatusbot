@@ -84,10 +84,8 @@ async def com_status(ctx:commands.Context):
         logging.debug(f'{ctx.author} is not an admin')
         return
 
-    taskStatus = 'All tasks are running'
-    for task in tasks.values():
-        if task.done(): taskStatus = 'Task(s) not running'
-    try: await ctx.send(f'Bot status:\nCurrently in {len(bot.guilds)} guild(s)\nWatching {len(servers)} Minecraft server(s)\n{taskStatus}', ephemeral=True)
+    taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
+    try: await ctx.send(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {len(servers)} MC server(s)\n{taskStatus}', ephemeral=True)
     except Exception: pass
 
 @grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
@@ -317,7 +315,7 @@ async def update():
                             db.updateServerStatus(guild.id, server['address'], status)
                             await statChan.edit(name=status)
                             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
-                except Exception as e: logging.info(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                except Exception as e: logging.warning(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                 try:
                     if config['showPlayers'] and (server['playersTime'] is None \
                         or dt.now() - dt.fromisoformat(server['playersTime']) >= td(minutes=config['updateInterval'])):
@@ -332,7 +330,7 @@ async def update():
                             db.updateServerPlayers(guild.id, server['address'], players)
                             await msg.edit(content=players)
                             logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
-                except Exception as e: logging.info(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                except Exception as e: logging.warning(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                 await asyncio.sleep(0)
             await asyncio.sleep(0)
         await asyncio.sleep(1)
@@ -354,7 +352,7 @@ async def bot_status():
             try:
                 await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers', type=discord.ActivityType.watching))
                 logging.info(f'Updated bot status ({num})')
-            except Exception as e: logging.info(f'Error updating bot status ({num}): {str(e)}')
+            except Exception as e: logging.warning(f'Error updating bot status ({num}): {str(e)}')
         await asyncio.sleep(3600)
 
 async def crash_handler(tasks):
@@ -364,7 +362,7 @@ async def crash_handler(tasks):
             if task.done():
                 lock.reset()
                 tasks[method] = loop.create_task(method())
-                logging.warning(f'{method.__name__} task has crashed and been restarted')
+                logging.error(f'{method.__name__} task has crashed and been restarted')
                 print(f'--Restarted task: {method.__name__}')
 
 if __name__ == '__main__':
