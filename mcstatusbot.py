@@ -10,28 +10,19 @@ from datetime import datetime as dt, timedelta as td
 from utils.keylock import keylock as kl
 from utils.database import database
 
-logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'pingInterval': 1, 'updateInterval': 1, 'serversPerGuild': 2, 'showPlayers': True}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, "updateDelays": {"offline": 0.1, "day": 0.5, "week": 1}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
 
 intents=discord.Intents.default()
 # intents.message_content = True
 bot = commands.AutoShardedBot('$', intents=intents, help_command=commands.DefaultHelpCommand(no_category='Commands'))
 
 async def init():
-    global config
     global db
     global tasks
     global lock
     lock = kl()
 
-    if os.path.exists('config.json'):
-        with open('config.json', 'r') as file:
-            config = json.loads(file.read())
-    else:
-        with open('config.json', 'w') as file:
-            file.write(json.dumps(config, indent=4))
-    
     await lock.acquire('master')
     loop.create_task(bot_login(config['token']))
 
@@ -106,7 +97,12 @@ async def com_reload(ctx:commands.Context):
     
     if os.path.exists('config.json'):
         with open('config.json', 'r') as file:
-            config = json.loads(file.read())
+            tempConfig = json.loads(file.read())
+        if list(config) != list(tempConfig):
+            os.replace('config.json', 'config.json.old')
+            with open('config.json', 'w') as file:
+                file.write(json.dumps(config, indent=4))
+        else: config = tempConfig
     else:
         with open('config.json', 'w') as file:
             file.write(json.dumps(config, indent=4))
@@ -224,6 +220,10 @@ async def com_rem_error(ctx, error):
         except Exception: pass
 @com_rem.autocomplete('address')
 async def com_rem_autocomplete(interaction: discord.Interaction, current: str) -> list[app.Choice[str]]:
+    if not isinstance(interaction.user, discord.member.Member):
+        return [app.Choice(name='Not available in DMs', value='')]
+    if str(interaction.user.id) != config['adminId'] and not interaction.user.guild_permissions.manage_channels:
+        return [app.Choice(name='Insufficient permissions', value='')]
     addresses = [server['address'] for server in db.getGuildServers(interaction.guild_id)]
     return [app.Choice(name=address, value=address) for address in addresses if current.lower() in address.lower()]
 
@@ -263,45 +263,49 @@ async def update():
     while True:
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
-                if server['statusTime'] is not None:
-                    #if dt.now() - dt.fromisoformat(server['statusTime']) >= td(minutes=max(10, config['updateInterval']))
-                    if 'OFFLINE' in server['status']: interval = td(minutes=max(10, config['updateInterval']))
-                if server['statusTime'] is None \
-                or dt.now() - dt.fromisoformat(server['statusTime']) >= interval:
+                await asyncio.sleep(0)
+                statChan = bot.get_channel(server['statusChannel'])
+                if not statChan: continue
+                statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
+                interval = td(minutes=max(config['updateInterval'], 5.1))
+                if statusTime is not None:
+                    if dt.now() - statusTime >= td(days=7): interval += td(hours=config['updateDelays']['week'])
+                    elif dt.now() - statusTime >= td(days=1): interval += td(hours=config['updateDelays']['day'])
+                    elif 'OFFLINE' in server['status']: interval += td(hours=config['updateDelays']['offline'])
+                if statusTime is None or dt.now() - statusTime >= interval:
                     try: lookup = await js.async_lookup(server['address'])
                     except Exception as e:
                         logging.warning(f'Error acquiring status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                         continue
                     else:
                         try: reply = await lookup.async_status()
-                        except Exception as e: reply = None
+                        except Exception: reply = None
                     try:
                         if reply is not None:
                             status = '🟢 ONLINE: ' + str(reply.players.online) + ' / ' + str(reply.players.max)
                         else: status = '🔴 OFFLINE'
-                        statChan = bot.get_channel(server['statusChannel'])
-                        if status != server['status'] and statChan is not None:
+                        if status != server['status']:
                             db.updateServerStatus(guild.id, server['address'], status)
                             await statChan.edit(name=status)
                             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
                     except Exception as e: logging.warning(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                     try:
-                        if config['showPlayers']:
+                        if config['showPlayers'] and (server['playersTime'] is None or dt.now() - dt.fromisoformat(server['playersTime']) >= interval):
+                            msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
+                            if not msg: continue
                             if reply is not None:
                                 players = '-===ONLINE===-\n'
                                 if reply.players.sample is not None:
                                     for player in reply.players.sample:
                                         players += player.name + '\n'
                             else: players = '-===OFFLINE===-'
-                            msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
-                            if players != server['players'] and msg is not None:
+                            if players != server['players']:
                                 db.updateServerPlayers(guild.id, server['address'], players)
                                 await msg.edit(content=players)
                                 logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
                     except Exception as e: logging.warning(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
-                await asyncio.sleep(0)
             await asyncio.sleep(0)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0)
 
 async def bot_login(token):
     try:
@@ -334,7 +338,20 @@ async def crash_handler(tasks):
                 print(f'--Restarted task: {method.__name__}')
 
 if __name__ == '__main__':
+    if os.path.exists('config.json'):
+        with open('config.json', 'r') as file:
+            tempConfig = json.loads(file.read())
+        if list(config) != list(tempConfig):
+            os.replace('config.json', 'config.json.old')
+            with open('config.json', 'w') as file:
+                file.write(json.dumps(config, indent=4))
+        else: config = tempConfig
+    else:
+        with open('config.json', 'w') as file:
+            file.write(json.dumps(config, indent=4))
+
     if not os.path.exists('./logs/'): os.mkdir('./logs/')
+    logging.basicConfig(filename=f'./logs/{str(dt.date(dt.now()))}.log', format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO if not config['debug'] else logging.DEBUG)
     logging.info('====================BEGIN====================')
 
     loop = asyncio.new_event_loop()
