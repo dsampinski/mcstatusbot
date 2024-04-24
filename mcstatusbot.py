@@ -265,32 +265,42 @@ async def update():
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
                 statChan = bot.get_channel(server['statusChannel'])
-                if not statChan: continue
+                if not statChan:
+                    logging.debug(f'Passing {server["address"]} in {guild} ({guild.id}): Status channel not found')
+                    continue
                 statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if statusTime is not None:
                     if dt.now() - statusTime >= td(days=7): interval += td(hours=config['updateDelays']['week'])
                     elif dt.now() - statusTime >= td(days=1): interval += td(hours=config['updateDelays']['day'])
                     elif 'OFFLINE' in server['status']: interval += td(hours=config['updateDelays']['offline'])
-                if statusTime is None or dt.now() - statusTime >= interval:
-                    try: lookup = await js.async_lookup(server['address'])
+                
+                if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
+                    logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
+                    db.pingServer(guild.id, server['address'])
+                    try:
+                        lookup = await js.async_lookup(server['address'])
+                        logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
                     except Exception as e:
-                        logging.warning(f'Error acquiring status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                        logging.warning(f'Error looking up {server["address"]} in {guild} ({guild.id}): {str(e)}')
                         continue
                     else:
                         try: reply = await lookup.async_status()
                         except Exception: reply = None
+                        logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id})')
+                    
                     try:
                         if reply is not None:
                             status = '🟢 ONLINE: ' + str(reply.players.online) + ' / ' + str(reply.players.max)
                         else: status = '🔴 OFFLINE'
                         if status != server['status']:
-                            db.updateServerStatus(guild.id, server['address'], status)
                             await statChan.edit(name=status)
+                            db.updateServerStatus(guild.id, server['address'], status)
                             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
                     except Exception as e: logging.warning(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                    
                     try:
-                        if config['showPlayers'] and (server['playersTime'] is None or dt.now() - dt.fromisoformat(server['playersTime']) >= interval):
+                        if config['showPlayers']:
                             msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
                             if not msg: continue
                             if reply is not None:
@@ -300,8 +310,8 @@ async def update():
                                         players += player.name + '\n'
                             else: players = '-===OFFLINE===-'
                             if players != server['players']:
-                                db.updateServerPlayers(guild.id, server['address'], players)
                                 await msg.edit(content=players)
+                                db.updateServerPlayers(guild.id, server['address'], players)
                                 logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
                     except Exception as e: logging.warning(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
             await asyncio.sleep(0)

@@ -3,8 +3,8 @@ import json
 import os
 
 class database:
-    _db_version = 2
-    _server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message', 'statusTime', 'status', 'playersTime', 'players')
+    _db_version = 3
+    _server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message', 'statusTime', 'status', 'playersTime', 'players', 'pingTime')
     def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
         self.db.execute('PRAGMA journal_mode = MEMORY')
@@ -21,6 +21,7 @@ class database:
                                                                 server_status TEXT DEFAULT NULL,
                                                                 server_playersTime TEXT DEFAULT NULL,
                                                                 server_players TEXT DEFAULT NULL,
+                                                                server_pingTime TEXT DEFAULT NULL,
                                                                 PRIMARY KEY(guild_id, server_address)   )''')
         self.db.commit()
     
@@ -68,6 +69,11 @@ class database:
                             WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
         self.db.commit()
 
+    def pingServer(self, guild_id, address):
+        self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime'))
+                            WHERE guild_id = ? AND server_address = ?''', (guild_id, address))
+        self.db.commit()
+
     def removeServers(self, guild_id, address=None):
         if address is None:
             addresses = [server['address'] for server in self.getGuildServers(guild_id)]
@@ -112,6 +118,13 @@ class database:
             db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_players TEXT DEFAULT NULL')
-            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (database._db_version,))
+            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (2,))
             db.close()
+            version = 2
+        if version == 2:
+            db = database(file)
+            db.db.execute('ALTER TABLE servers ADD server_pingTime TEXT DEFAULT NULL')
+            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (3,))
+            db.close()
+            version = 3
             return True
