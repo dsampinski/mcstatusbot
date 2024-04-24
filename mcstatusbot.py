@@ -265,9 +265,7 @@ async def update():
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
                 statChan = bot.get_channel(server['statusChannel'])
-                if not statChan:
-                    logging.debug(f'Passing {server["address"]} in {guild} ({guild.id}): Status channel not found')
-                    continue
+                if not statChan: continue
                 statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if statusTime is not None:
