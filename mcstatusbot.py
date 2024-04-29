@@ -11,7 +11,7 @@ from utils.keylock import keylock as kl
 from utils.database import database
 
 
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, "updateDelays": {"offline": 0.1, "day": 0.5, "week": 1}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, "updateDelays": {"offline": 5, "day": 25, "week": 55}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
 
 intents=discord.Intents.default()
 # intents.message_content = True
@@ -24,7 +24,7 @@ async def init():
     lock = kl()
 
     await lock.acquire('master')
-    loop.create_task(bot_login(config['token']))
+    loop.create_task(bot_login())
 
     await lock.acquire('master')
     print('--Initializing database')
@@ -33,7 +33,7 @@ async def init():
     print('  Initializing tasks')
     tasks = {update: loop.create_task(update()),
              bot_status: loop.create_task(bot_status())}
-    loop.create_task(crash_handler(tasks))
+    loop.create_task(crash_handler())
     print('  Ready\n')
     lock.release('master')
 
@@ -63,18 +63,19 @@ async def grp_admin(ctx): pass
 async def com_status(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $admin status in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
-        logging.debug(f'{ctx.author} is not an admin')
+        logging.info(f'{ctx.author} is not an admin')
         return
 
     taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
-    try: await ctx.send(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {len(db.getServers(addressOnly=True))} MC server(s)\n{taskStatus}', ephemeral=True)
+    try: await ctx.send(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {len(db.getServers(addressOnly=True))} MC server(s)\
+        \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
     except Exception: pass
 
 @grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
 async def com_export(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $admin export in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
-        logging.debug(f'{ctx.author} is not an admin')
+        logging.info(f'{ctx.author} is not an admin')
         return
     
     if not os.path.exists('./export/'):
@@ -92,7 +93,7 @@ async def com_reload(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $admin reload in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     global config
     if str(ctx.author.id) != config['adminId']:
-        logging.debug(f'{ctx.author} is not an admin')
+        logging.info(f'{ctx.author} is not an admin')
         return
     
     if os.path.exists('config.json'):
@@ -114,7 +115,7 @@ async def com_reload(ctx:commands.Context):
 async def com_shutdown(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $admin shutdown in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if str(ctx.author.id) != config['adminId']:
-        logging.debug(f'{ctx.author} is not an admin')
+        logging.info(f'{ctx.author} is not an admin')
         return
     
     print('--Shutting down')
@@ -130,23 +131,23 @@ async def com_shutdown(ctx:commands.Context):
 async def com_add(ctx:commands.Context, address, name=None):
     logging.info(f'{ctx.author} ran $add {address} {name} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if not isinstance(ctx.author, discord.member.Member):
-        logging.debug(f'{ctx.author} is in a DM channel')
+        logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
-        logging.debug(f'{ctx.author} does not have permission to manage channels')
+        logging.info(f'{ctx.author} does not have permission to manage channels')
         try: await ctx.send('You do not have permission to manage channels', ephemeral=True)
         except Exception: pass
         return
     
     if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address) is not None:
-        logging.debug(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
+        logging.info(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send('Server is already added', ephemeral=True)
         except Exception: pass
         lock.release(ctx.guild.id)
         return
     if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['serversPerGuild']:
-        logging.debug(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
+        logging.info(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
         try: await ctx.send('Reached maximum amount of servers in this guild', ephemeral=True)
         except Exception: pass
         lock.release(ctx.guild.id)
@@ -175,7 +176,7 @@ async def com_add(ctx:commands.Context, address, name=None):
         except Exception: pass
     lock.release(ctx.guild.id)
 @com_add.error
-async def com_add_error(ctx, error):
+async def com_add_error(ctx:commands.Context, error):
     if isinstance(error, commands.MissingRequiredArgument):
         try: await ctx.send('Invalid arguments\n$add <address> <name>')
         except Exception: pass
@@ -184,10 +185,10 @@ async def com_add_error(ctx, error):
 async def com_rem(ctx:commands.Context, address):
     logging.info(f'{ctx.author} ran $rem {address} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if not isinstance(ctx.author, discord.member.Member):
-        logging.debug(f'{ctx.author} is in a DM channel')
+        logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
-        logging.debug(f'{ctx.author} does not have permission to manage channels')
+        logging.info(f'{ctx.author} does not have permission to manage channels')
         try: await ctx.send('You do not have permission to manage channels', ephemeral=True)
         except Exception: pass
         return
@@ -209,17 +210,17 @@ async def com_rem(ctx:commands.Context, address):
         try: await ctx.send(f'Removed {address}\'s status from this guild', ephemeral=True)
         except Exception: pass
     else:
-        logging.debug(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
+        logging.info(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send('This server does not exist', ephemeral=True)
         except Exception: pass
     lock.release(ctx.guild.id)
 @com_rem.error
-async def com_rem_error(ctx, error):
+async def com_rem_error(ctx:commands.Context, error):
     if isinstance(error, commands.MissingRequiredArgument):
         try: await ctx.send('Invalid arguments\n$rem <address>')
         except Exception: pass
 @com_rem.autocomplete('address')
-async def com_rem_autocomplete(interaction: discord.Interaction, current: str) -> list[app.Choice[str]]:
+async def com_rem_autocomplete(interaction:discord.Interaction, current:str) -> list[app.Choice[str]]:
     if not isinstance(interaction.user, discord.member.Member):
         return [app.Choice(name='Not available in DMs', value='')]
     if str(interaction.user.id) != config['adminId'] and not interaction.user.guild_permissions.manage_channels:
@@ -231,10 +232,10 @@ async def com_rem_autocomplete(interaction: discord.Interaction, current: str) -
 async def com_list(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $list in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     if not isinstance(ctx.author, discord.member.Member):
-        logging.debug(f'{ctx.author} is in a DM channel')
+        logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
-        logging.debug(f'{ctx.author} does not have permission to manage channels')
+        logging.info(f'{ctx.author} does not have permission to manage channels')
         try: await ctx.send('You do not have permission to manage channels', ephemeral=True)
         except Exception: pass
         return
@@ -248,11 +249,11 @@ async def com_list(ctx:commands.Context):
     lock.release(ctx.guild.id)
 
 @bot.event
-async def on_guild_join(guild):
+async def on_guild_join(guild:discord.Guild):
     logging.info(f'Joined {guild} ({guild.id})')
 
 @bot.event
-async def on_guild_remove(guild):
+async def on_guild_remove(guild:discord.Guild):
     logging.info(f'Left {guild} ({guild.id})')
     await lock.acquire(guild.id)
     addresses = db.removeServers(guild.id)
@@ -269,9 +270,9 @@ async def update():
                 statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if statusTime is not None:
-                    if dt.now() - statusTime >= td(days=7): interval += td(hours=config['updateDelays']['week'])
-                    elif dt.now() - statusTime >= td(days=1): interval += td(hours=config['updateDelays']['day'])
-                    elif 'OFFLINE' in server['status']: interval += td(hours=config['updateDelays']['offline'])
+                    if dt.now() - statusTime >= td(days=7): interval += td(minutes=config['updateDelays']['week'])
+                    elif dt.now() - statusTime >= td(days=1): interval += td(minutes=config['updateDelays']['day'])
+                    elif 'OFFLINE' in server['status']: interval += td(minutes=config['updateDelays']['offline'])
                 
                 if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
@@ -295,7 +296,7 @@ async def update():
                             await statChan.edit(name=status)
                             db.updateServerStatus(guild.id, server['address'], status)
                             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
-                    except Exception as e: logging.warning(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                    except Exception as e: logging.debug(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                     
                     try:
                         if config['showPlayers']:
@@ -311,13 +312,13 @@ async def update():
                                 await msg.edit(content=players)
                                 db.updateServerPlayers(guild.id, server['address'], players)
                                 logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
-                    except Exception as e: logging.warning(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                    except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
             await asyncio.sleep(0)
-        await asyncio.sleep(0)
+        await asyncio.sleep(1)
 
-async def bot_login(token):
+async def bot_login():
     try:
-        await bot.start(token)
+        await bot.start(config['token'])
     except Exception as e:
         logging.error(f'Error logging in: {str(e)}')
         print(f'  Error logging in: {str(e)}')
@@ -335,7 +336,7 @@ async def bot_status():
             except Exception as e: logging.warning(f'Error updating bot status ({num}): {str(e)}')
         await asyncio.sleep(3600)
 
-async def crash_handler(tasks):
+async def crash_handler():
     while True:
         await asyncio.sleep(10)
         for method, task in tasks.items():
