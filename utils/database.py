@@ -73,8 +73,14 @@ class database:
         self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime'))
                             WHERE guild_id = ? AND server_address = ?''', (guild_id, address))
 
-    def removeServers(self, guild_id, address=None):
+    def removeServers(self, guild_id, address=None, statusChannel=None):
         if address is None:
+            if statusChannel is not None:
+                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id AND server_statusChannel = :statusChannel', {'guild_id': guild_id, 'statusChannel': statusChannel}).fetchone()
+                if query is not None:
+                    self.removeServers(guild_id, query[1])
+                    return query[1]
+                else: return None
             addresses = [server['address'] for server in self.getGuildServers(guild_id)]
             self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id', {'guild_id': guild_id})
             self.db.commit()

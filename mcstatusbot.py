@@ -37,19 +37,6 @@ async def init():
     print('  Ready\n')
     lock.release('master')
 
-@bot.event
-async def on_connect():
-    logging.info(f'Connecting')
-    print(f'--Connecting')
-    await bot.tree.sync()
-
-@bot.event
-async def on_ready():
-    logging.info(f'Logged in as {bot.user}')
-    print(f'  Logged in as {bot.user}')
-    print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
-    lock.release('master')
-
 @bot.hybrid_command(name='ping', help='Pings the bot', brief='Pings the bot')
 async def com_ping(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $ping in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
@@ -248,6 +235,11 @@ async def com_list(ctx:commands.Context):
     except Exception: pass
     lock.release(ctx.guild.id)
 
+# @bot.event
+# async def on_guild_channel_delete(channel:discord.VoiceChannel):
+#     address = db.removeServers(channel.guild.id, statusChannel=channel.id)
+#     if address: logging.info(f'Removed {address} from {channel.guild} ({channel.guild.id}): Status channel deleted')
+
 @bot.event
 async def on_guild_join(guild:discord.Guild):
     logging.info(f'Joined {guild} ({guild.id})')
@@ -255,10 +247,8 @@ async def on_guild_join(guild:discord.Guild):
 @bot.event
 async def on_guild_remove(guild:discord.Guild):
     logging.info(f'Left {guild} ({guild.id})')
-    await lock.acquire(guild.id)
     addresses = db.removeServers(guild.id)
-    logging.info(f'Removed {addresses} from {guild} ({guild.id})')
-    lock.release(guild.id)
+    if addresses: logging.info(f'Removed {addresses} from {guild} ({guild.id})')
 
 async def update():
     while True:
@@ -266,7 +256,7 @@ async def update():
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
                 statChan = bot.get_channel(server['statusChannel'])
-                if not statChan: continue
+                if statChan is None: continue
                 statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if statusTime is not None:
@@ -301,7 +291,7 @@ async def update():
                     try:
                         if config['showPlayers']:
                             msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
-                            if not msg: continue
+                            if msg is None: continue
                             if reply is not None:
                                 players = '-===ONLINE===-\n'
                                 if reply.players.sample is not None:
@@ -324,6 +314,19 @@ async def bot_login():
         print(f'  Error logging in: {str(e)}')
         await bot.close()
         loop.stop()
+
+@bot.event
+async def on_connect():
+    logging.info(f'Connecting')
+    print(f'--Connecting')
+    await bot.tree.sync()
+
+@bot.event
+async def on_ready():
+    logging.info(f'Logged in as {bot.user}')
+    print(f'  Logged in as {bot.user}')
+    print('  Admin:', await bot.fetch_user(int(config['adminId'])) if config['adminId'].isnumeric() else None, '\n')
+    lock.release('master')
 
 async def bot_status():
     num = None
