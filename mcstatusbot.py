@@ -31,7 +31,8 @@ async def init():
     if database.updateDB('database.db'): print('  Updated database')
     db = database('database.db')
     print('  Initializing tasks')
-    tasks = {update: loop.create_task(update()),
+    tasks = {memory: loop.create_task(memory()),
+             update: loop.create_task(update()),
              bot_status: loop.create_task(bot_status())}
     loop.create_task(crash_handler())
     print('  Ready\n')
@@ -54,7 +55,7 @@ async def com_status(ctx:commands.Context):
         return
 
     taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
-    try: await ctx.send(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {len(db.getServers(addressOnly=True))} MC server(s)\
+    try: await ctx.send(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {db.countServers()} MC server(s)\
         \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
     except Exception: pass
 
@@ -133,7 +134,7 @@ async def com_add(ctx:commands.Context, address, name=None):
         except Exception: pass
         lock.release(ctx.guild.id)
         return
-    if str(ctx.author.id) != config['adminId'] and len(db.getGuildServers(ctx.guild.id)) >= config['serversPerGuild']:
+    if str(ctx.author.id) != config['adminId'] and db.countServers(ctx.guild.id) >= config['serversPerGuild']:
         logging.info(f'{ctx.guild} ({ctx.guild.id}) reached maximum amount of servers')
         try: await ctx.send('Reached maximum amount of servers in this guild', ephemeral=True)
         except Exception: pass
@@ -156,7 +157,7 @@ async def com_add(ctx:commands.Context, address, name=None):
         try: await ctx.send('Error: ' + str(e), ephemeral=True)
         except Exception: pass
     else:
-        db.addServer(guild_id=ctx.guild.id, address=address, category=newCat.id, statusChannel=statChan.id, playersChannel=(playChan.id if config['showPlayers'] else None), message=(msg.id if config['showPlayers'] else None))
+        db.addServer(guildID=ctx.guild.id, address=address, categoryID=newCat.id, statusChannelID=statChan.id, playersChannelID=(playChan.id if config['showPlayers'] else None), messageID=(msg.id if config['showPlayers'] else None))
         logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
         logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send(f'Added {address}\'s status to this guild', ephemeral=True)
@@ -184,12 +185,12 @@ async def com_rem(ctx:commands.Context, address):
     if db.getGuildServers(ctx.guild.id, address) is not None:
         try:
             server = db.getGuildServers(ctx.guild.id, address)
-            if bot.get_channel(server['statusChannel']) is not None:
-                await bot.get_channel(server['statusChannel']).delete()
-            if bot.get_channel(server['playersChannel']) is not None:
-                await bot.get_channel(server['playersChannel']).delete()
-            if bot.get_channel(server['category']) is not None:
-                await bot.get_channel(server['category']).delete()
+            if bot.get_channel(server['statusChannelID']) is not None:
+                await bot.get_channel(server['statusChannelID']).delete()
+            if bot.get_channel(server['playersChannelID']) is not None:
+                await bot.get_channel(server['playersChannelID']).delete()
+            if bot.get_channel(server['categoryID']) is not None:
+                await bot.get_channel(server['categoryID']).delete()
         except Exception as e: logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
         db.removeServers(ctx.guild.id, address)
         logging.debug(f'Removed {server}')
@@ -212,7 +213,7 @@ async def com_rem_autocomplete(interaction:discord.Interaction, current:str) -> 
         return [app.Choice(name='Not available in DMs', value='')]
     if str(interaction.user.id) != config['adminId'] and not interaction.user.guild_permissions.manage_channels:
         return [app.Choice(name='Insufficient permissions', value='')]
-    addresses = [server['address'] for server in db.getGuildServers(interaction.guild_id)]
+    addresses = [server['address'] for server in db.getGuildServers(interaction.guild.id)]
     return [app.Choice(name=address, value=address) for address in addresses if current.lower() in address.lower()]
 
 @bot.hybrid_command(name='list', help='Lists all servers in the guild', brief='Lists servers')
@@ -237,7 +238,7 @@ async def com_list(ctx:commands.Context):
 
 # @bot.event
 # async def on_guild_channel_delete(channel:discord.VoiceChannel):
-#     address = db.removeServers(channel.guild.id, statusChannel=channel.id)
+#     address = db.removeServers(channel.guild.id, statusChannelID=channel.id)
 #     if address: logging.info(f'Removed {address} from {channel.guild} ({channel.guild.id}): Status channel deleted')
 
 @bot.event
@@ -255,28 +256,21 @@ async def update():
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
-                statChan = bot.get_channel(server['statusChannel'])
+                statChan = bot.get_channel(server['statusChannelID'])
                 if statChan is None: continue
-                statusTime = dt.fromisoformat(server['statusTime']) if server['statusTime'] else None
                 interval = td(minutes=max(config['updateInterval'], 5.1))
-                if statusTime is not None:
+                if server['statusTime'] is not None:
+                    statusTime = dt.fromisoformat(server['statusTime'])
                     if dt.now() - statusTime >= td(days=7): interval += td(minutes=config['updateDelays']['week'])
                     elif dt.now() - statusTime >= td(days=1): interval += td(minutes=config['updateDelays']['day'])
                     elif 'OFFLINE' in server['status']: interval += td(minutes=config['updateDelays']['offline'])
                 
-                if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
+                if server['address'] in servers and (servers[server['address']]['pingTime'] is None or dt.now() - servers[server['address']]['pingTime'] >= interval):
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
-                    db.pingServer(guild.id, server['address'])
-                    try:
-                        lookup = await js.async_lookup(server['address'])
-                        logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
-                    except Exception as e:
-                        logging.warning(f'Error looking up {server["address"]} in {guild} ({guild.id}): {str(e)}')
-                        continue
-                    else:
-                        try: reply = await lookup.async_status()
-                        except Exception: reply = None
-                        logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id})')
+                    try: reply = await servers[server['address']]['lookup'].async_status()
+                    except Exception: reply = None
+                    servers[server['address']]['pingTime'] = dt.now()
+                    logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id}): {"ONLINE" if reply else "OFFLINE"}')
                     
                     try:
                         if reply is not None:
@@ -285,12 +279,12 @@ async def update():
                         if status != server['status']:
                             await statChan.edit(name=status)
                             db.updateServerStatus(guild.id, server['address'], status)
-                            logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id})')
+                            logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id}): {status}')
                     except Exception as e: logging.debug(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
                     
                     try:
                         if config['showPlayers']:
-                            msg = [playChan.get_partial_message(server['message']) if playChan else None for playChan in [bot.get_channel(server['playersChannel'])]][0]
+                            msg = [playChan.get_partial_message(server['messageID']) if playChan else None for playChan in [bot.get_channel(server['playersChannelID'])]][0]
                             if msg is None: continue
                             if reply is not None:
                                 players = '-===ONLINE===-\n'
@@ -301,8 +295,21 @@ async def update():
                             if players != server['players']:
                                 await msg.edit(content=players)
                                 db.updateServerPlayers(guild.id, server['address'], players)
-                                logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id})')
+                                logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id}): {players}')
                     except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+            await asyncio.sleep(0)
+        await asyncio.sleep(1)
+
+async def memory():
+    global servers
+    servers = {}
+    while True:
+        for address in db.getServers(addressOnly=True):
+            if address not in servers:
+                try:
+                    servers[address] = {'lookup': await js.async_lookup(address), 'pingTime': None}
+                    logging.debug(f'Looked up {address}')
+                except Exception as e: logging.warning(f'Error looking up {address}: {str(e)}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 
@@ -331,8 +338,8 @@ async def on_ready():
 async def bot_status():
     num = None
     while True:
-        if bot.is_ready() and (num is None or len(db.getServers(addressOnly=True)) != num):
-            num = len(db.getServers(addressOnly=True))
+        if bot.is_ready() and (num is None or db.countServers() != num):
+            num = db.countServers()
             try:
                 await bot.change_presence(activity=discord.Activity(name=f'{num if num > 1 else ""} MC servers', type=discord.ActivityType.watching))
                 logging.info(f'Updated bot status ({num})')
