@@ -31,8 +31,7 @@ async def init():
     if database.updateDB('database.db'): print('  Updated database')
     db = database('database.db')
     print('  Initializing tasks')
-    tasks = {memory: loop.create_task(memory()),
-             update: loop.create_task(update()),
+    tasks = {update: loop.create_task(update()),
              bot_status: loop.create_task(bot_status())}
     loop.create_task(crash_handler())
     print('  Ready\n')
@@ -152,7 +151,7 @@ async def com_add(ctx:commands.Context, address, name=None):
             playChan = statChan
             msg = await playChan.send('Pinging...')
     except Exception as e:
-        if not isinstance(e, discord.DiscordException): logging.warning(f'Error looking up {address}: {str(e)}')
+        # if not isinstance(e, discord.DiscordException): logging.warning(f'Error looking up {address}: {str(e)}')
         logging.debug(f'Error adding {address} to {ctx.guild} ({ctx.guild.id}): {str(e)}')
         try: await ctx.send('Error: ' + str(e), ephemeral=True)
         except Exception: pass
@@ -265,12 +264,19 @@ async def update():
                     elif dt.now() - statusTime >= td(days=1): interval += td(minutes=config['updateDelays']['day'])
                     elif 'OFFLINE' in server['status']: interval += td(minutes=config['updateDelays']['offline'])
                 
-                if server['address'] in servers and (servers[server['address']]['pingTime'] is None or dt.now() - servers[server['address']]['pingTime'] >= interval):
+                if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
-                    try: reply = await servers[server['address']]['lookup'].async_status()
-                    except Exception: reply = None
-                    servers[server['address']]['pingTime'] = dt.now()
-                    logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id}): {"ONLINE" if reply else "OFFLINE"}')
+                    db.pingServer(guild.id, server['address'])
+                    try:
+                        lookup = await js.async_lookup(server['address'])
+                        logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
+                    except Exception as e:
+                        logging.warning(f'Error looking up {server["address"]} in {guild} ({guild.id}): {str(e)}')
+                        continue
+                    else:
+                        try: reply = await lookup.async_status()
+                        except Exception: reply = None
+                        logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id}): {"ONLINE" if reply else "OFFLINE"}')
                     
                     try:
                         if reply is not None:
@@ -297,19 +303,6 @@ async def update():
                                 db.updateServerPlayers(guild.id, server['address'], players)
                                 logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id}): {players}')
                     except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
-            await asyncio.sleep(0)
-        await asyncio.sleep(1)
-
-async def memory():
-    global servers
-    servers = {}
-    while True:
-        for address in db.getServers(addressOnly=True):
-            if address not in servers:
-                try:
-                    servers[address] = {'lookup': await js.async_lookup(address), 'pingTime': None}
-                    logging.debug(f'Looked up {address}')
-                except Exception as e: logging.warning(f'Error looking up {address}: {str(e)}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 

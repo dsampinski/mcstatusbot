@@ -4,7 +4,7 @@ import os
 
 class database:
     _db_version = 3
-    _server_attr = ('guildID', 'address', 'categoryID', 'statusChannelID', 'playersChannelID', 'messageID', 'statusTime', 'status', 'playersTime', 'players')
+    _server_attr = ('guildID', 'address', 'categoryID', 'statusChannelID', 'playersChannelID', 'messageID', 'statusTime', 'status', 'playersTime', 'players', 'pingTime')
     def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
         self.db.execute('PRAGMA journal_mode = MEMORY')
@@ -21,6 +21,7 @@ class database:
                                                                 server_status TEXT DEFAULT NULL,
                                                                 server_playersTime TEXT DEFAULT NULL,
                                                                 server_players TEXT DEFAULT NULL,
+                                                                server_pingTime TEXT DEFAULT NULL,
                                                                 PRIMARY KEY(guildID, server_address)   )''')
         self.db.commit()
     
@@ -72,6 +73,11 @@ class database:
     def updateServerPlayers(self, guildID, address, players):
         self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime')), server_players = ?
                             WHERE guildID = ? AND server_address = ?''', (players, guildID, address))
+        self.db.commit()
+    
+    def pingServer(self, guildID, address):
+        self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime'))
+                            WHERE guildID = ? AND server_address = ?''', (guildID, address))
         self.db.commit()
 
     def removeServers(self, guildID, address=None, statusChannelID=None):
@@ -134,6 +140,7 @@ class database:
             db.db.execute('ALTER TABLE servers RENAME server_statusChannel TO server_statusChannelID')
             db.db.execute('ALTER TABLE servers RENAME server_playersChannel TO server_playersChannelID')
             db.db.execute('ALTER TABLE servers RENAME server_message TO server_messageID')
+            db.db.execute('ALTER TABLE servers ADD server_pingTime TEXT DEFAULT NULL')
             db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (3,))
             db.close()
             version = 3
