@@ -31,7 +31,7 @@ async def init():
     if database.updateDB('database.db'): print('  Updated database')
     db = database('database.db')
     print('  Initializing tasks')
-    tasks = {update: loop.create_task(update()),
+    tasks = {tracker: loop.create_task(tracker()),
              bot_status: loop.create_task(bot_status())}
     loop.create_task(crash_handler())
     print('  Ready\n')
@@ -250,13 +250,12 @@ async def on_guild_remove(guild:discord.Guild):
     addresses = db.removeServers(guild.id)
     if addresses: logging.info(f'Removed {addresses} from {guild} ({guild.id})')
 
-async def update():
+async def tracker():
     while True:
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
-                statChan = bot.get_channel(server['statusChannelID'])
-                if statChan is None: continue
+                if not bot.get_channel(server['statusChannelID']): continue
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if server['statusTime'] is not None:
                     statusTime = dt.fromisoformat(server['statusTime'])
@@ -266,45 +265,53 @@ async def update():
                 
                 if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
+                    loop.create_task(update(guild, server))
                     db.pingServer(guild.id, server['address'])
-                    try:
-                        lookup = await js.async_lookup(server['address'])
-                        logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
-                    except Exception as e:
-                        logging.warning(f'Error looking up {server["address"]} in {guild} ({guild.id}): {str(e)}')
-                        continue
-                    else:
-                        try: reply = await lookup.async_status()
-                        except Exception: reply = None
-                        logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id}): {"ONLINE" if reply else "OFFLINE"}')
-                    
-                    try:
-                        if reply is not None:
-                            status = '🟢 ONLINE: ' + str(reply.players.online) + ' / ' + str(reply.players.max)
-                        else: status = '🔴 OFFLINE'
-                        if status != server['status']:
-                            await statChan.edit(name=status)
-                            db.updateServerStatus(guild.id, server['address'], status)
-                            logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id}): {status}')
-                    except Exception as e: logging.debug(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
-                    
-                    try:
-                        if config['showPlayers']:
-                            msg = [playChan.get_partial_message(server['messageID']) if playChan else None for playChan in [bot.get_channel(server['playersChannelID'])]][0]
-                            if msg is None: continue
-                            if reply is not None:
-                                players = '-===ONLINE===-\n'
-                                if reply.players.sample is not None:
-                                    for player in reply.players.sample:
-                                        players += player.name + '\n'
-                            else: players = '-===OFFLINE===-'
-                            if players != server['players']:
-                                await msg.edit(content=players)
-                                db.updateServerPlayers(guild.id, server['address'], players)
-                                logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id}): {players}')
-                    except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
             await asyncio.sleep(0)
         await asyncio.sleep(1)
+
+async def update(guild:discord.Guild, server):
+    await lock.acquire(f'{guild.id}:{server['address']}')
+    try:
+        lookup = await js.async_lookup(server['address'])
+        logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
+    except Exception as e:
+        logging.warning(f'Error looking up {server["address"]} in {guild} ({guild.id}): {str(e)}')
+        lock.release(f'{guild.id}:{server['address']}')
+        return
+    else:
+        try: reply = await lookup.async_status()
+        except Exception: reply = None
+        logging.debug(f'Pinged {server["address"]} in {guild} ({guild.id}): {"ONLINE" if reply else "OFFLINE"}')
+    
+    try:
+        if reply is not None:
+            status = '🟢 ONLINE: ' + str(reply.players.online) + ' / ' + str(reply.players.max)
+        else: status = '🔴 OFFLINE'
+        if status != server['status']:
+            await bot.get_channel(server['statusChannelID']).edit(name=status)
+            db.updateServerStatus(guild.id, server['address'], status)
+            logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id}): {status}')
+    except Exception as e: logging.debug(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+    
+    try:
+        if config['showPlayers']:
+            msg = [playChan.get_partial_message(server['messageID']) if playChan else None for playChan in [bot.get_channel(server['playersChannelID'])]][0]
+            if msg is None:
+                lock.release(f'{guild.id}:{server['address']}')
+                return
+            if reply is not None:
+                players = '-===ONLINE===-\n'
+                if reply.players.sample is not None:
+                    for player in reply.players.sample:
+                        players += player.name + '\n'
+            else: players = '-===OFFLINE===-'
+            if players != server['players']:
+                await msg.edit(content=players)
+                db.updateServerPlayers(guild.id, server['address'], players)
+                logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id}): {players}')
+    except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
+    lock.release(f'{guild.id}:{server['address']}')
 
 async def bot_login():
     try:
