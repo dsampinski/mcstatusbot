@@ -4,6 +4,7 @@ from discord import app_commands as app
 from mcstatus.server import JavaServer as js
 import asyncio
 import os
+import sys
 import json
 import logging
 from datetime import datetime as dt, timedelta as td
@@ -11,7 +12,7 @@ from utils.keylock import keylock as kl
 from utils.database import database
 
 
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, "updateDelays": {"offline": 5, "day": 25, "week": 55}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, "updateDelays": {"day": 25, "week": 55}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
 
 intents=discord.Intents.default()
 # intents.message_content = True
@@ -32,7 +33,8 @@ async def init():
     db = database('database.db')
     print('  Initializing tasks')
     tasks = {tracker: loop.create_task(tracker()),
-             bot_status: loop.create_task(bot_status())}
+             bot_status: loop.create_task(bot_status()),
+             cli: loop.create_task(cli())}
     loop.create_task(crash_handler())
     print('  Ready\n')
     lock.release('master')
@@ -58,66 +60,10 @@ async def com_status(ctx:commands.Context):
         \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
     except Exception: pass
 
-@grp_admin.command(name='export', help='Exports the database as JSON to the filesystem', brief='Exports database')
-async def com_export(ctx:commands.Context):
-    logging.info(f'{ctx.author} ran $admin export in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    if str(ctx.author.id) != config['adminId']:
-        logging.info(f'{ctx.author} is not an admin')
-        return
-    
-    if not os.path.exists('./export/'):
-        os.mkdir('./export/')
-    with open('./export/bot.guilds.json', 'w') as file:
-        file.write(json.dumps(dict((guild.id, str(guild)) for guild in bot.guilds), indent=4))
-    with open('./export/db.guildServers.json', 'w') as file:
-        file.write(json.dumps(db.getGuildServers(), indent=4))
-    logging.info('Exported database')
-    try: await ctx.send('Exported database', ephemeral=True)
-    except Exception: pass
-
-@grp_admin.command(name='reload', help='Reloads the bot\'s config file', brief='Reloads config')
-async def com_reload(ctx:commands.Context):
-    logging.info(f'{ctx.author} ran $admin reload in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    global config
-    if str(ctx.author.id) != config['adminId']:
-        logging.info(f'{ctx.author} is not an admin')
-        return
-    
-    if os.path.exists('config.json'):
-        with open('config.json', 'r') as file:
-            tempConfig = json.loads(file.read())
-        if list(config) != list(tempConfig):
-            os.replace('config.json', 'config.json.old')
-            with open('config.json', 'w') as file:
-                file.write(json.dumps(config, indent=4))
-        else: config = tempConfig
-    else:
-        with open('config.json', 'w') as file:
-            file.write(json.dumps(config, indent=4))
-    logging.info('Reloaded config')
-    try: await ctx.send('Reloaded config', ephemeral=True)
-    except Exception: pass
-
-@grp_admin.command(name='shutdown', help='Shuts down the bot', brief='Shuts down bot')
-async def com_shutdown(ctx:commands.Context):
-    logging.info(f'{ctx.author} ran $admin shutdown in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    if str(ctx.author.id) != config['adminId']:
-        logging.info(f'{ctx.author} is not an admin')
-        return
-    
-    print('--Shutting down')
-    logging.info('Shutting down...')
-    try: await ctx.send('Shutting down...', ephemeral=True)
-    except Exception: pass
-    await lock.close()
-    await bot.close()
-    db.close()
-    loop.stop()
-
 @bot.hybrid_command(name='add', help='Adds a server\'s status to the guild', brief='Adds a server')
 async def com_add(ctx:commands.Context, address, name=None):
     logging.info(f'{ctx.author} ran $add {address} {name} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    if not isinstance(ctx.author, discord.member.Member):
+    if ctx.guild is None:
         logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
@@ -127,7 +73,7 @@ async def com_add(ctx:commands.Context, address, name=None):
         return
     
     if not await lock.acquire(ctx.guild.id): return
-    if db.getGuildServers(ctx.guild.id, address) is not None:
+    if db.getGuildServers(ctx.guild.id, address):
         logging.info(f'{address} is already added in {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send('Server is already added', ephemeral=True)
         except Exception: pass
@@ -156,7 +102,7 @@ async def com_add(ctx:commands.Context, address, name=None):
         try: await ctx.send('Error: ' + str(e), ephemeral=True)
         except Exception: pass
     else:
-        db.addServer(guildID=ctx.guild.id, address=address, categoryID=newCat.id, statusChannelID=statChan.id, playersChannelID=(playChan.id if config['showPlayers'] else None), messageID=(msg.id if config['showPlayers'] else None))
+        db.addServer(guildId=ctx.guild.id, address=address, categoryId=newCat.id, statusChannelId=statChan.id, playersChannelId=(playChan.id if config['showPlayers'] else None), messageId=(msg.id if config['showPlayers'] else None))
         logging.debug(f'Added {db.getGuildServers(ctx.guild.id, address)}')
         logging.info(f'Added {address} to {ctx.guild} ({ctx.guild.id})')
         try: await ctx.send(f'Added {address}\'s status to this guild', ephemeral=True)
@@ -171,7 +117,7 @@ async def com_add_error(ctx:commands.Context, error):
 @bot.hybrid_command(name='rem', help='Removes a server\'s status from the guild', brief='Removes a server')
 async def com_rem(ctx:commands.Context, address):
     logging.info(f'{ctx.author} ran $rem {address} in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    if not isinstance(ctx.author, discord.member.Member):
+    if ctx.guild is None:
         logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
@@ -181,15 +127,15 @@ async def com_rem(ctx:commands.Context, address):
         return
     
     if not await lock.acquire(ctx.guild.id): return
-    if db.getGuildServers(ctx.guild.id, address) is not None:
+    if db.getGuildServers(ctx.guild.id, address):
         try:
             server = db.getGuildServers(ctx.guild.id, address)
-            if bot.get_channel(server['statusChannelID']) is not None:
-                await bot.get_channel(server['statusChannelID']).delete()
-            if bot.get_channel(server['playersChannelID']) is not None:
-                await bot.get_channel(server['playersChannelID']).delete()
-            if bot.get_channel(server['categoryID']) is not None:
-                await bot.get_channel(server['categoryID']).delete()
+            if bot.get_channel(server['statusChannelId']):
+                await bot.get_channel(server['statusChannelId']).delete()
+            if bot.get_channel(server['playersChannelId']):
+                await bot.get_channel(server['playersChannelId']).delete()
+            if bot.get_channel(server['categoryId']):
+                await bot.get_channel(server['categoryId']).delete()
         except Exception as e: logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
         db.removeServers(ctx.guild.id, address)
         logging.debug(f'Removed {server}')
@@ -208,7 +154,7 @@ async def com_rem_error(ctx:commands.Context, error):
         except Exception: pass
 @com_rem.autocomplete('address')
 async def com_rem_autocomplete(interaction:discord.Interaction, current:str) -> list[app.Choice[str]]:
-    if not isinstance(interaction.user, discord.member.Member):
+    if interaction.guild is None:
         return [app.Choice(name='Not available in DMs', value='')]
     if str(interaction.user.id) != config['adminId'] and not interaction.user.guild_permissions.manage_channels:
         return [app.Choice(name='Insufficient permissions', value='')]
@@ -218,7 +164,7 @@ async def com_rem_autocomplete(interaction:discord.Interaction, current:str) -> 
 @bot.hybrid_command(name='list', help='Lists all servers in the guild', brief='Lists servers')
 async def com_list(ctx:commands.Context):
     logging.info(f'{ctx.author} ran $list in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-    if not isinstance(ctx.author, discord.member.Member):
+    if ctx.guild is None:
         logging.info(f'{ctx.author} is in a DM channel')
         return
     if str(ctx.author.id) != config['adminId'] and not ctx.author.guild_permissions.manage_channels:
@@ -237,7 +183,7 @@ async def com_list(ctx:commands.Context):
 
 # @bot.event
 # async def on_guild_channel_delete(channel:discord.VoiceChannel):
-#     address = db.removeServers(channel.guild.id, statusChannelID=channel.id)
+#     address = db.removeServers(channel.guild.id, statusChannelId=channel.id)
 #     if address: logging.info(f'Removed {address} from {channel.guild} ({channel.guild.id}): Status channel deleted')
 
 @bot.event
@@ -255,23 +201,21 @@ async def tracker():
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
-                if not bot.get_channel(server['statusChannelID']): continue
+                if not bot.get_channel(server['statusChannelId']): continue
                 interval = td(minutes=max(config['updateInterval'], 5.1))
                 if server['statusTime'] is not None:
                     statusTime = dt.fromisoformat(server['statusTime'])
                     if dt.now() - statusTime >= td(days=7): interval += td(minutes=config['updateDelays']['week'])
                     elif dt.now() - statusTime >= td(days=1): interval += td(minutes=config['updateDelays']['day'])
-                    elif 'OFFLINE' in server['status']: interval += td(minutes=config['updateDelays']['offline'])
-                
                 if server['pingTime'] is None or dt.now() - dt.fromisoformat(server['pingTime']) >= interval:
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
                     loop.create_task(update(guild, server))
-                    db.pingServer(guild.id, server['address'])
             await asyncio.sleep(0)
         await asyncio.sleep(1)
 
 async def update(guild:discord.Guild, server):
     await lock.acquire(f'{guild.id}:{server['address']}')
+    db.pingServer(guild.id, server['address'])
     try:
         lookup = await js.async_lookup(server['address'])
         logging.debug(f'Looked up {server["address"]} in {guild} ({guild.id})')
@@ -289,22 +233,22 @@ async def update(guild:discord.Guild, server):
             status = '🟢 ONLINE: ' + str(reply.players.online) + ' / ' + str(reply.players.max)
         else: status = '🔴 OFFLINE'
         if status != server['status']:
-            await bot.get_channel(server['statusChannelID']).edit(name=status)
+            await bot.get_channel(server['statusChannelId']).edit(name=status)
             db.updateServerStatus(guild.id, server['address'], status)
             logging.debug(f'Updated status channel of {server["address"]} in {guild} ({guild.id}): {status}')
     except Exception as e: logging.debug(f'Error updating status of {server["address"]} in {guild} ({guild.id}): {str(e)}')
     
     try:
         if config['showPlayers']:
-            msg = [playChan.get_partial_message(server['messageID']) if playChan else None for playChan in [bot.get_channel(server['playersChannelID'])]][0]
+            msg = [playChan.get_partial_message(server['messageId']) if playChan else None for playChan in [bot.get_channel(server['playersChannelId'])]][0]
             if msg is None:
                 lock.release(f'{guild.id}:{server['address']}')
                 return
             if reply is not None:
-                players = '-===ONLINE===-\n'
+                players = '-===ONLINE===-'
                 if reply.players.sample is not None:
                     for player in reply.players.sample:
-                        players += player.name + '\n'
+                        players += '\n' + player.name
             else: players = '-===OFFLINE===-'
             if players != server['players']:
                 await msg.edit(content=players)
@@ -314,18 +258,20 @@ async def update(guild:discord.Guild, server):
     lock.release(f'{guild.id}:{server['address']}')
 
 async def bot_login():
-    try:
-        await bot.start(config['token'])
-    except Exception as e:
-        logging.error(f'Error logging in: {str(e)}')
-        print(f'  Error logging in: {str(e)}')
-        await bot.close()
-        loop.stop()
+    if not config['token'].startswith('//'):
+        try:
+            await bot.start(config['token'])
+        except Exception as e:
+            logging.error(f'Error logging in: {str(e)}')
+            print(f'  Error logging in: {str(e)}')
+            await bot.close()
+            loop.stop()
+    else: lock.release('master')
 
 @bot.event
 async def on_connect():
-    logging.info(f'Connecting')
-    print(f'--Connecting')
+    logging.info('Connecting')
+    print('--Connecting')
     await bot.tree.sync()
 
 @bot.event
@@ -345,6 +291,56 @@ async def bot_status():
                 logging.info(f'Updated bot status ({num})')
             except Exception as e: logging.warning(f'Error updating bot status ({num}): {str(e)}')
         await asyncio.sleep(3600)
+
+async def cli():
+    while True:
+        print('\r> ', end='')
+        command = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
+        command = command.strip()
+
+        match command:
+            case 'export':
+                if not os.path.exists('./export/'):
+                    os.mkdir('./export/')
+                with open('./export/bot.guilds.json', 'w') as file:
+                    file.write(json.dumps(dict((guild.id, str(guild)) for guild in bot.guilds), indent=4))
+                with open('./export/db.guildServers.json', 'w') as file:
+                    file.write(json.dumps(db.getGuildServers(), indent=4))
+                logging.info('Exported database')
+                print('  Exported database')
+            
+            case 'reload':
+                global config
+                if os.path.exists('config.json'):
+                    with open('config.json', 'r') as file:
+                        tempConfig = json.loads(file.read())
+                    if list(config) != list(tempConfig):
+                        os.replace('config.json', 'config.json.old')
+                        with open('config.json', 'w') as file:
+                            file.write(json.dumps(config, indent=4))
+                    else: config = tempConfig
+                else:
+                    with open('config.json', 'w') as file:
+                        file.write(json.dumps(config, indent=4))
+                logging.info('Reloaded config')
+                print('  Reloaded config')
+            
+            case 'shutdown':
+                print('  Shutting down')
+                logging.info('Shutting down...')
+                await lock.close()
+                try: await bot.close()
+                except Exception: pass
+                db.close()
+                loop.stop()
+                return
+            
+            case 'help':
+                print('  Commands: export reload shutdown')
+        
+        if command.startswith('py '):
+            try: exec(command[3:])
+            except Exception as e: print(f'  Error: {e}')
 
 async def crash_handler():
     while True:

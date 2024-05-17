@@ -2,7 +2,7 @@
     "token": "<DISCORD BOT TOKEN>",
     "adminId": "<DISCORD ID OF ADMIN>",
     "updateInterval": 5,
-    "updateDelays": {"offline": 5, "day": 25, "week": 55},
+    "updateDelays": {"day": 25, "week": 55},
     "serversPerGuild": 2,
     "showPlayers": true,
     "debug": false
