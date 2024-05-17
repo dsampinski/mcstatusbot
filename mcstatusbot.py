@@ -271,7 +271,7 @@ async def bot_login():
 @bot.event
 async def on_connect():
     logging.info('Connecting')
-    print('--Connecting')
+    print('\r--Connecting')
     await bot.tree.sync()
 
 @bot.event
@@ -350,7 +350,7 @@ async def crash_handler():
                 lock.reset()
                 tasks[method] = loop.create_task(method())
                 logging.error(f'{method.__name__} task has crashed and been restarted')
-                print(f'--Restarted task: {method.__name__}')
+                print(f'\r--Restarted task: {method.__name__}')
 
 if __name__ == '__main__':
     if os.path.exists('config.json'):
