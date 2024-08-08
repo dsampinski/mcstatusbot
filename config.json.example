@@ -1,8 +1,9 @@
 {
     "token": "<DISCORD BOT TOKEN>",
     "adminId": "<DISCORD ID OF ADMIN>",
-    "pingInterval": 1,
-    "updateInterval": 1,
+    "updateInterval": 5,
+    "updateDelays": {"day": 25, "week": 55},
     "serversPerGuild": 2,
-    "showPlayers": true
+    "showPlayers": true,
+    "debug": false
 }

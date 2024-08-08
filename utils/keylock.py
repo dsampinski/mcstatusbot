@@ -12,7 +12,7 @@ class keylock:
         else:
             trig = 0
             self._keys[key] = [trig]
-        while self._keys[key][0] != trig or (key != 'master' and 'master' in self._keys): await asyncio.sleep(0.5)
+        while self._keys[key][0] != trig or (key != 'master' and 'master' in self._keys): await asyncio.sleep(0)
         return True
     def release(self, key):
         if key in self._keys:
@@ -22,4 +22,4 @@ class keylock:
         self._keys = {}
     async def close(self):
         self._closed = True
-        while self._keys: await asyncio.sleep(0.5)
+        while self._keys: await asyncio.sleep(0)

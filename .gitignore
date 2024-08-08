@@ -1,5 +1,6 @@
 database.db
 config.json
+config.json.old
 cache/
 export/
 logs/

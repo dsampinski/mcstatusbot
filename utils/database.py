@@ -3,8 +3,8 @@ import json
 import os
 
 class database:
-    _db_version = 2
-    _server_attr = ('guild_id', 'address', 'category', 'statusChannel', 'playersChannel', 'message', 'statusTime', 'status', 'playersTime', 'players')
+    _db_version = 3
+    _server_attr = ('address', 'categoryId', 'statusChannelId', 'playersChannelId', 'messageId', 'statusTime', 'status', 'playersTime', 'players', 'pingTime')
     def __init__(self, file='database.db'):
         self.db = sqlite3.connect(file)
         self.db.execute('PRAGMA journal_mode = MEMORY')
@@ -13,14 +13,15 @@ class database:
         if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (database._db_version,))
         self.db.execute('''CREATE TABLE IF NOT EXISTS servers(  guild_id INT,
                                                                 server_address TEXT,
-                                                                server_category INT DEFAULT NULL,
-                                                                server_statusChannel INT DEFAULT NULL,
-                                                                server_playersChannel INT DEFAULT NULL,
-                                                                server_message INT DEFAULT NULL,
+                                                                server_categoryId INT DEFAULT NULL,
+                                                                server_statusChannelId INT DEFAULT NULL,
+                                                                server_playersChannelId INT DEFAULT NULL,
+                                                                server_messageId INT DEFAULT NULL,
                                                                 server_statusTime TEXT DEFAULT NULL,
                                                                 server_status TEXT DEFAULT NULL,
                                                                 server_playersTime TEXT DEFAULT NULL,
                                                                 server_players TEXT DEFAULT NULL,
+                                                                server_pingTime TEXT DEFAULT NULL,
                                                                 PRIMARY KEY(guild_id, server_address)   )''')
         self.db.commit()
     
@@ -34,47 +35,64 @@ class database:
                 return [entity[0] for entity in query]
             else:
                 query = self.db.execute('SELECT * FROM servers').fetchall()
-                return [dict(zip(database._server_attr, entity)) for entity in query]
+                return [tuple(entity) for entity in query]
         else:
             query = self.db.execute('SELECT * FROM servers WHERE server_address = :address', {'address': address}).fetchall()
-            return [dict(zip(database._server_attr, entity)) for entity in query]
+            return [tuple(entity) for entity in query]
 
-    def getGuildServers(self, guild_id=None, address=None):
-        if guild_id is not None:
+    def countServers(self, guildId=None):
+        if guildId is None:
+            query = self.db.execute('SELECT COUNT(server_address) FROM servers').fetchone()
+        else: query = self.db.execute('SELECT COUNT(server_address) FROM servers WHERE guild_id = ?', (guildId,)).fetchone()
+        return query[0]
+
+    def getGuildServers(self, guildId=None, address=None):
+        if guildId is not None:
             if address is None:
-                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id ORDER BY server_address', {'guild_id': guild_id}).fetchall()
-                return [dict(zip(database._server_attr[1:], entity[1:])) for entity in query]
+                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guildId', {'guildId': guildId}).fetchall()
+                return [dict(zip(database._server_attr, entity[1:])) for entity in query]
             else:
-                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address}).fetchone()
-                return dict(zip(database._server_attr[1:], query[1:])) if query is not None else None
+                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guildId AND server_address = :address', {'guildId': guildId, 'address': address}).fetchone()
+                return dict(zip(database._server_attr, query[1:])) if query is not None else None
         else:
             guildServers = dict.fromkeys(self.getServers(guildIdOnly=True))
             for guild in guildServers: guildServers[guild] = self.getGuildServers(guild)
             return guildServers
 
-    def addServer(self, guild_id, address, category, statusChannel, playersChannel, message):
-        if self.getGuildServers(guild_id, address) is None:
-            self.db.execute('''INSERT INTO servers(guild_id, server_address, server_category, server_statusChannel, server_playersChannel, server_message)
-                                            VALUES(?, ?, ?, ?, ?, ?)''', (guild_id, address, category, statusChannel, playersChannel, message))
+    def addServer(self, guildId, address, categoryId, statusChannelId, playersChannelId, messageId):
+        if self.getGuildServers(guildId, address) is None:
+            self.db.execute('''INSERT INTO servers(guild_id, server_address, server_categoryId, server_statusChannelId, server_playersChannelId, server_messageId)
+                                            VALUES(?, ?, ?, ?, ?, ?)''', (guildId, address, categoryId, statusChannelId, playersChannelId, messageId))
             self.db.commit()
 
-    def updateServerStatus(self, guild_id, address, status):
+    def updateServerStatus(self, guildId, address, status):
         self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime')), server_status = ?
-                            WHERE guild_id = ? AND server_address = ?''', (status, guild_id, address))
+                            WHERE guild_id = ? AND server_address = ?''', (status, guildId, address))
         self.db.commit()
     
-    def updateServerPlayers(self, guild_id, address, players):
+    def updateServerPlayers(self, guildId, address, players):
         self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime')), server_players = ?
-                            WHERE guild_id = ? AND server_address = ?''', (players, guild_id, address))
+                            WHERE guild_id = ? AND server_address = ?''', (players, guildId, address))
+        self.db.commit()
+    
+    def pingServer(self, guildId, address):
+        self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime'))
+                            WHERE guild_id = ? AND server_address = ?''', (guildId, address))
         self.db.commit()
 
-    def removeServers(self, guild_id, address=None):
+    def removeServers(self, guildId, address=None, statusChannelId=None):
         if address is None:
-            addresses = [server['address'] for server in self.getGuildServers(guild_id)]
-            self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id', {'guild_id': guild_id})
+            if statusChannelId is not None:
+                query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guildId AND server_statusChannelId = :statusChannelId', {'guildId': guildId, 'statusChannelId': statusChannelId}).fetchone()
+                if query is not None:
+                    self.removeServers(guildId, query[1])
+                    return query[1]
+                else: return None
+            addresses = [server['address'] for server in self.getGuildServers(guildId)]
+            self.db.execute('DELETE FROM servers WHERE guild_id = :guildId', {'guildId': guildId})
             self.db.commit()
             return addresses
-        else: self.db.execute('DELETE FROM servers WHERE guild_id = :guild_id AND server_address = :address', {'guild_id': guild_id, 'address': address})
+        else: self.db.execute('DELETE FROM servers WHERE guild_id = :guildId AND server_address = :address', {'guildId': guildId, 'address': address})
         self.db.commit()
             
 
@@ -91,7 +109,7 @@ class database:
             db = database(sqlite_db)
             for guild in guildServers:
                 for server in guildServers[guild]:
-                    db.addServer(int(guild), server['address'], server['category'], server['statusChannel'], server['playersChannel'], server['message'])
+                    db.addServer(int(guild), server['address'], server['categoryId'], server['statusChannelId'], server['playersChannelId'], server['messageId'])
             db.close()
             print('Done')
         else: print('File does not exist')
@@ -112,6 +130,17 @@ class database:
             db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_players TEXT DEFAULT NULL')
-            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (database._db_version,))
+            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (2,))
             db.close()
+            version = 2
+        if version == 2:
+            db = database(file)
+            db.db.execute('ALTER TABLE servers RENAME server_category TO server_categoryId')
+            db.db.execute('ALTER TABLE servers RENAME server_statusChannel TO server_statusChannelId')
+            db.db.execute('ALTER TABLE servers RENAME server_playersChannel TO server_playersChannelId')
+            db.db.execute('ALTER TABLE servers RENAME server_message TO server_messageId')
+            db.db.execute('ALTER TABLE servers ADD server_pingTime TEXT DEFAULT NULL')
+            db.db.execute('UPDATE _variables SET intValue = ? WHERE name = "version"', (3,))
+            db.close()
+            version = 3
             return True

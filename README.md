@@ -22,13 +22,13 @@ The bot's [token](https://www.writebots.com/discord-bot-token/)
 
 The Discord ID of the bot's admin (to bypass restrictions)
 
-> pingInterval
-
-Interval (in minutes) between each server ping
-
 > updateInterval
 
 Interval (in minutes) between each status update
+
+> updateDelays
+
+Delay of status updates when the server is inactive for a day/week
 
 > serversPerGuild
 
@@ -58,19 +58,22 @@ Removes a server's status from the guild
 Lists all servers in the guild
 
 ## Bot admin
-> /admin reload
-
-Reloads the bot's config file
-
-> /admin shutdown
-
-Shuts down the bot
 
 > /admin status
 
 Shows the status of the bot
 
-> /admin export
+# CLI Commands
+
+> reload
+
+Reloads the bot's config file
+
+> shutdown
+
+Shuts down the bot
+
+> export
 
 Exports the database as JSON to the filesystem
 
