@@ -2,7 +2,7 @@ import sqlite3
 import json
 import os
 
-class database:
+class Database:
     _db_version = 3
     _server_attr = ('address', 'categoryId', 'statusChannelId', 'playersChannelId', 'messageId', 'statusTime', 'status', 'playersTime', 'players', 'pingTime')
     def __init__(self, file='database.db'):
@@ -10,7 +10,7 @@ class database:
         self.db.execute('PRAGMA journal_mode = MEMORY')
         self.db.execute('CREATE TABLE IF NOT EXISTS _variables(name TEXT PRIMARY KEY, intValue INT, realValue REAL, textValue TEXT)')
         version = self.db.execute('SELECT intValue FROM _variables WHERE name = "version"').fetchone()
-        if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (database._db_version,))
+        if version is None: self.db.execute('INSERT INTO _variables(name, intValue) VALUES("version", ?)', (Database._db_version,))
         self.db.execute('''CREATE TABLE IF NOT EXISTS servers(  guild_id INT,
                                                                 server_address TEXT,
                                                                 server_categoryId INT DEFAULT NULL,
@@ -50,10 +50,10 @@ class database:
         if guildId is not None:
             if address is None:
                 query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guildId', {'guildId': guildId}).fetchall()
-                return [dict(zip(database._server_attr, entity[1:])) for entity in query]
+                return [dict(zip(Database._server_attr, entity[1:])) for entity in query]
             else:
                 query = self.db.execute('SELECT * FROM servers WHERE guild_id = :guildId AND server_address = :address', {'guildId': guildId, 'address': address}).fetchone()
-                return dict(zip(database._server_attr, query[1:])) if query is not None else None
+                return dict(zip(Database._server_attr, query[1:])) if query is not None else None
         else:
             guildServers = dict.fromkeys(self.getServers(guildIdOnly=True))
             for guild in guildServers: guildServers[guild] = self.getGuildServers(guild)
@@ -66,17 +66,17 @@ class database:
             self.db.commit()
 
     def updateServerStatus(self, guildId, address, status):
-        self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime')), server_status = ?
+        self.db.execute('''UPDATE servers SET server_statusTime = strftime("%Y-%m-%dT%H:%M:%S", datetime("now", "localtime")), server_status = ?
                             WHERE guild_id = ? AND server_address = ?''', (status, guildId, address))
         self.db.commit()
     
     def updateServerPlayers(self, guildId, address, players):
-        self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime')), server_players = ?
+        self.db.execute('''UPDATE servers SET server_playersTime = strftime("%Y-%m-%dT%H:%M:%S", datetime("now", "localtime")), server_players = ?
                             WHERE guild_id = ? AND server_address = ?''', (players, guildId, address))
         self.db.commit()
     
     def pingServer(self, guildId, address):
-        self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime('now', 'localtime'))
+        self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime("now", "localtime"))
                             WHERE guild_id = ? AND server_address = ?''', (guildId, address))
         self.db.commit()
 
@@ -88,7 +88,7 @@ class database:
                     self.removeServers(guildId, query[1])
                     return query[1]
                 else: return None
-            addresses = [server['address'] for server in self.getGuildServers(guildId)]
+            addresses = [server["address"] for server in self.getGuildServers(guildId)]
             self.db.execute('DELETE FROM servers WHERE guild_id = :guildId', {'guildId': guildId})
             self.db.commit()
             return addresses
@@ -106,16 +106,16 @@ class database:
             with open(json_db, 'r') as file:
                 guildServers = json.loads(file.read())
             print('Migrating...')
-            db = database(sqlite_db)
+            db = Database(sqlite_db)
             for guild in guildServers:
                 for server in guildServers[guild]:
-                    db.addServer(int(guild), server['address'], server['categoryId'], server['statusChannelId'], server['playersChannelId'], server['messageId'])
+                    db.addServer(int(guild), server["address"], server["categoryId"], server["statusChannelId"], server["playersChannelId"], server["messageId"])
             db.close()
             print('Done')
         else: print('File does not exist')
 
     @classmethod
-    def updateDB(self, file='database.db', version=None):
+    def updateDb(self, file='database.db', version:int|None=None):
         if not os.path.exists(file): return
         if version is None:
             db = sqlite3.connect(file)
@@ -125,7 +125,7 @@ class database:
             else: version = 1
             db.close()
         if version == 1:
-            db = database(file)
+            db = Database(file)
             db.db.execute('ALTER TABLE servers ADD server_statusTime TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_status TEXT DEFAULT NULL')
             db.db.execute('ALTER TABLE servers ADD server_playersTime TEXT DEFAULT NULL')
@@ -134,7 +134,7 @@ class database:
             db.close()
             version = 2
         if version == 2:
-            db = database(file)
+            db = Database(file)
             db.db.execute('ALTER TABLE servers RENAME server_category TO server_categoryId')
             db.db.execute('ALTER TABLE servers RENAME server_statusChannel TO server_statusChannelId')
             db.db.execute('ALTER TABLE servers RENAME server_playersChannel TO server_playersChannelId')
