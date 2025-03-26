@@ -8,10 +8,9 @@ from utils.keylock import KeyLock
 from utils.database import Database
 
 
-config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF USER>', 'updateInterval': 5, 'updateDelays': {'day': 25, 'week': 55}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
+config = {'token': '<DISCORD BOT TOKEN>', 'adminId': '<DISCORD ID OF ADMIN>', 'updateInterval': 5, 'updateDelays': {'day': 25, 'week': 55}, 'serversPerGuild': 2, 'showPlayers': True, 'debug': False}
 
-intents=discord.Intents.default()
-bot = commands.AutoShardedBot('$', intents=intents, help_command=commands.DefaultHelpCommand(no_category='Commands'))
+bot = commands.AutoShardedBot('/', intents=discord.Intents.default())
 
 async def init():
     global db
@@ -39,19 +38,6 @@ async def com_ping(ctx:discord.Interaction):
     logging.info(f'{ctx.user} ran $ping in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
     try: await ctx.response.send_message(f'Pong ({int(bot.latency*1000)}ms)', ephemeral=True)
     except Exception: pass
-
-# grp_admin = app.Group(name='grp_admin', description='Admin guild commands', guild_ids=[int(config["adminGuildId"]) if config["adminGuildId"].isnumeric() else None])
-# @grp_admin.command(name='status', description='Shows bot status')
-# async def com_status(ctx:discord.Interaction):
-#     logging.info(f'{ctx.user} ran $admin status in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
-#     if str(ctx.user.id) != config["adminId"]:
-#         logging.info(f'{ctx.user} is not an admin')
-#         return
-
-#     taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
-#     try: await ctx.response.send_message(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {db.countServers()} MC server(s)\
-#         \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
-#     except Exception: pass
 
 @bot.tree.command(name='add', description='Adds a server\'s status')
 async def com_add(ctx:discord.Interaction, address:str, name:str|None=None):
@@ -179,10 +165,23 @@ async def com_list(ctx:discord.Interaction):
     except Exception: pass
     lock.release(ctx.guild.id)
 
-# @bot.event
-# async def on_guild_channel_delete(channel:discord.VoiceChannel):
-#     address = db.removeServers(channel.guild.id, statusChannelId=channel.id)
-#     if address: logging.info(f'Removed {address} from {channel.guild} ({channel.guild.id}): Status channel deleted')
+grp_admin = app.Group(name='admin', description='Admin guild commands')
+@grp_admin.command(name='status', description='Shows bot status')
+async def com_status(ctx:discord.Interaction):
+    logging.info(f'{ctx.user} ran $admin status in {ctx.guild or "DM"} ({ctx.guild.id if ctx.guild is not None else ""})')
+    if str(ctx.user.id) != config["adminId"]:
+        logging.info(f'{ctx.user} is not an admin')
+        return
+
+    taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
+    try: await ctx.response.send_message(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {db.countServers()} MC server(s)\
+        \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
+    except Exception: pass
+
+@bot.event
+async def on_guild_channel_delete(channel:discord.VoiceChannel):
+    address = db.removeServers(channel.guild.id, statusChannelId=channel.id)
+    if address: logging.info(f'Removed {address} from {channel.guild} ({channel.guild.id}): Status channel deleted')
 
 @bot.event
 async def on_guild_join(guild:discord.Guild):
@@ -254,32 +253,6 @@ async def update(guild:discord.Guild, server):
                 logging.debug(f'Updated players message of {server["address"]} in {guild} ({guild.id}): {players}')
     except Exception as e: logging.debug(f'Error updating players of {server["address"]} in {guild} ({guild.id}): {str(e)}')
     lock.release(f'{guild.id}:{server["address"]}')
-
-async def bot_login():
-    if not config["token"].startswith('//'):
-        try:
-            await bot.start(config["token"])
-        except Exception as e:
-            logging.error(f'Error logging in: {str(e)}')
-            print(f'  Error logging in: {str(e)}')
-            await bot.close()
-            loop.stop()
-    else: lock.release('master')
-
-@bot.event
-async def on_connect():
-    logging.info('Connecting')
-    print('\r--Connecting')
-
-@bot.event
-async def on_ready():
-    logging.info(f'Logged in as {bot.user}')
-    print(f'  Logged in as {bot.user}')
-    print('  Admin:', await bot.fetch_user(int(config["adminId"])) if config["adminId"].isnumeric() else None, '\n')
-    lock.release('master')
-    await bot.tree.sync()
-    # bot.tree.add_command(grp_admin)
-    # if config["adminGuildId"].isnumeric(): await bot.tree.sync(guild=discord.Object(int(config["adminGuildId"])))
 
 async def bot_status():
     num = None
@@ -360,6 +333,32 @@ async def crash_handler():
                 tasks[method] = loop.create_task(method())
                 logging.error(f'{method.__name__} task has crashed and been restarted')
                 print(f'\r--Restarted task: {method.__name__}')
+
+async def bot_login():
+    if not config["token"].startswith('//'):
+        try:
+            await bot.start(config["token"])
+        except Exception as e:
+            logging.error(f'Error logging in: {str(e)}')
+            print(f'  Error logging in: {str(e)}')
+            await bot.close()
+            loop.stop()
+    else: lock.release('master')
+
+@bot.event
+async def on_connect():
+    logging.info('Connecting')
+    print('\r--Connecting')
+
+@bot.event
+async def on_ready():
+    logging.info(f'Logged in as {bot.user}')
+    print(f'  Logged in as {bot.user}')
+    print('  Admin:', await bot.fetch_user(int(config["adminId"])) if config["adminId"].isnumeric() else None, '\n')
+    lock.release('master')
+    await bot.tree.sync()
+    bot.tree.add_command(grp_admin, guild=discord.Object(bot.guilds[0].id))
+    await bot.tree.sync(guild=discord.Object(bot.guilds[0].id))
 
 if __name__ == '__main__':
     if os.path.exists('config.json'):
