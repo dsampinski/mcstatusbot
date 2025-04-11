@@ -175,7 +175,7 @@ async def com_status(ctx:discord.Interaction):
 
     taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
     try: await ctx.response.send_message(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {db.countServers()} MC server(s)\
-        \nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
+        \nAverage loop time: {loop_time_avg}ms\nLocks: {list(lock._keys.keys())}\n{taskStatus}', ephemeral=True)
     except Exception: pass
 
 @bot.event
@@ -194,7 +194,10 @@ async def on_guild_remove(guild:discord.Guild):
     if addresses: logging.info(f'Removed {addresses} from {guild} ({guild.id})')
 
 async def tracker():
+    global loop_time_avg
+    loop_times = [0]*11
     while True:
+        loop_time_marker = dt.now()
         for guild in bot.guilds:
             for server in db.getGuildServers(guild.id):
                 await asyncio.sleep(0)
@@ -208,6 +211,9 @@ async def tracker():
                     logging.debug(f'Determined interval of {server["address"]} in {guild} ({guild.id}): {interval}')
                     loop.create_task(update(guild, server))
             await asyncio.sleep(0)
+        loop_times[loop_times[-1]] = (dt.now() - loop_time_marker).microseconds / 1000
+        loop_times[-1] = (loop_times[-1] + 1) % 10
+        loop_time_avg = sum(loop_times[:10])/10
         await asyncio.sleep(1)
 
 async def update(guild:discord.Guild, server):
@@ -314,8 +320,8 @@ async def cli():
             
             case 'status':
                 taskStatus = '\n'.join([f'❌ {func.__name__} task is not running' for func, task in tasks.items() if task.done()])
-                print(f'Bot status:\nIn {len(bot.guilds)} guild(s)\nWatching {db.countServers()} MC server(s)\
-                    \nLocks: {list(lock._keys.keys())}\n{taskStatus}')
+                print(f'  Bot status:\n  In {len(bot.guilds)} guild(s)\n  Watching {db.countServers()} MC server(s)\
+                    \n  Average loop time: {loop_time_avg}ms\n  Locks: {list(lock._keys.keys())}\n  {taskStatus}')
 
             case 'help':
                 print('  Commands: export reload shutdown status')
