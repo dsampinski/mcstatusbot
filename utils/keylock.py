@@ -1,6 +1,6 @@
 import asyncio
 
-class keylock:
+class KeyLock:
     def __init__(self):
         self._closed = False
         self.reset()
