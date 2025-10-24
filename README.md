@@ -65,6 +65,10 @@ Shows the status of the bot
 
 # CLI Commands
 
+> status
+
+Shows the status of the bot
+
 > reload
 
 Reloads the bot's config file
