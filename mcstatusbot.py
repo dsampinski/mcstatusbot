@@ -23,7 +23,9 @@ async def init():
 
     await lock.acquire('master')
     print('--Initializing database')
-    if Database.updateDb('database.db'): print('  Updated database')
+    if Database.updateDb('database.db'):
+        logging.info('Updated database')
+        print('  Updated database')
     db = Database('database.db')
     print('  Initializing tasks')
     tasks = {tracker: loop.create_task(tracker()),

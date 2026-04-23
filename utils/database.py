@@ -78,7 +78,6 @@ class Database:
     def pingServer(self, guildId, address):
         self.db.execute('''UPDATE servers SET server_pingTime = strftime("%Y-%m-%dT%H:%M:%S", datetime("now", "localtime"))
                             WHERE guild_id = ? AND server_address = ?''', (guildId, address))
-        self.db.commit()
 
     def removeServers(self, guildId, address=None, statusChannelId=None):
         if address is None:
