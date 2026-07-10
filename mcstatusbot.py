@@ -114,8 +114,13 @@ async def com_rem(ctx:discord.Interaction, address:str):
     
     if not await lock.acquire(ctx.guild.id): return
     if db.getGuildServers(ctx.guild.id, address):
+        server = db.getGuildServers(ctx.guild.id, address)
+        db.removeServers(ctx.guild.id, address)
+        logging.debug(f'Removed {server}')
+        logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
+        try: await ctx.response.send_message(f'Removed {address}\'s status from this guild', ephemeral=True)
+        except Exception: pass
         try:
-            server = db.getGuildServers(ctx.guild.id, address)
             if bot.get_channel(server["statusChannelId"]):
                 await bot.get_channel(server["statusChannelId"]).delete()
             if bot.get_channel(server["playersChannelId"]):
@@ -123,11 +128,6 @@ async def com_rem(ctx:discord.Interaction, address:str):
             if bot.get_channel(server["categoryId"]):
                 await bot.get_channel(server["categoryId"]).delete()
         except Exception as e: logging.debug(f'Error deleting channels in {ctx.guild} ({ctx.guild.id}): {str(e)}')
-        db.removeServers(ctx.guild.id, address)
-        logging.debug(f'Removed {server}')
-        logging.info(f'Removed {address} from {ctx.guild} ({ctx.guild.id})')
-        try: await ctx.response.send_message(f'Removed {address}\'s status from this guild', ephemeral=True)
-        except Exception: pass
     else:
         logging.info(f'{address} does not exist in {ctx.guild} ({ctx.guild.id})')
         try: await ctx.response.send_message('This server does not exist', ephemeral=True)
